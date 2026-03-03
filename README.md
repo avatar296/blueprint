@@ -1,3 +1,66 @@
-# blueprint
+# Blueprint: Sovereign Career Architecture
 
-Blueprint: Sovereign Career ArchitectureBlueprint is a modular, agentic AI engine designed to automate the end-to-end job acquisition pipeline. Built by a Lead System Architect for senior-level career transitions, it replaces the manual "spray and pray" job search with a high-precision, data-sovereign, and automated scouting system.🏔️ The VisionIn a market saturated with high-volume, low-quality job postings, Blueprint treats a career search as an architectural problem. By leveraging Agentic AI and Browser Automation, Blueprint scouts roles in the Pueblo/Colorado Springs corridor (and remote), evaluates them against a 20-year Master Profile, and prepares "ATS-optimized" applications—all while running on private, self-hosted hardware.🏗️ System ArchitectureBlueprint is designed with a decoupled, containerized architecture managed via Coolify on a dedicated Hetzner node.1. The Scout (Ingestion Layer)Engine: Python + Playwright (Stealth Mode).Function: Automated scraping of LinkedIn, Indeed, and niche boards.Filtering: Targets specific senior roles (Principal Architect, Data Scientist, Staff Engineer).2. The Evaluator (Logic Layer)Engine: LangChain + Local LLM (Llama 3/Ollama).Function: Performs a multi-point comparison between Job Descriptions (JD) and a JSON Master Profile.Scoring: Outputs a 0-100 "Fit Score" based on tech stack (AWS, MS SQL, Next.js), experience (20+ years), and education (MSCS).3. The Dashboard (Human-in-the-Loop)Engine: Next.js (Mountain Modern Slate & Teal UI).Function: A centralized "Recruiter Command Center" to review, edit, and approve ranked opportunities.4. The Applier (Execution Layer)Engine: Playwright + Headless LaTeX.Function: Dynamically generates a custom, ATS-optimized PDF for every application and automates form entry on platforms like Workday and Lever.🛠️ Tech StackComponentTechnologyOrchestrationCoolify (Self-Hosted CI/CD)InfrastructureHetzner Dedicated (Ubuntu 24.04)FrontendNext.js + Tailwind CSSDatabasePostgreSQLAgentic AILangChain / PythonIdentityAuthentik (OIDC)🔒 Data Sovereignty & SecurityUnlike third-party "Auto-Apply" SaaS tools, Blueprint prioritizes security:Privacy: Your 20-year career history and PII never leave your private server.Identity: All administrative access is guarded by Authentik SSO.Integrity: Uses signed Webhooks for CI/CD updates from GitHub to Coolify.🚀 Getting StartedDefine Master Profile: Populate /data/master_profile.json with your full technical history.Environment Setup: Configure .env with LinkedIn/Indeed credentials and Ollama API endpoints.Deploy: Push to GitHub to trigger the Coolify automatic build pipeline.Built in Walsenburg, CO. Architecting the future of technical career transitions.
+Blueprint is a modular, agentic AI engine designed to automate the end-to-end job acquisition pipeline. Built by a Lead System Architect for senior-level career transitions, it replaces the manual "spray and pray" job search with a high-precision, data-sovereign, and automated scouting system.
+
+## The Vision
+
+In a market saturated with high-volume, low-quality job postings, Blueprint treats a career search as an architectural problem. By leveraging Agentic AI and Browser Automation, Blueprint scouts roles in the Pueblo/Colorado Springs corridor (and remote), evaluates them against a 20-year Master Profile, and prepares "ATS-optimized" applications—all while running on private, self-hosted hardware.
+
+## System Architecture
+
+Blueprint is designed with a decoupled, containerized architecture managed via Coolify on a dedicated Hetzner node.
+
+### 1. The Scout (Ingestion Layer)
+
+- **Engine:** Python + Playwright (Stealth Mode).
+- **Function:** Automated scraping of LinkedIn, Indeed, and niche boards.
+- **Filtering:** Targets specific senior roles (Principal Architect, Data Scientist, Staff Engineer).
+
+### 2. The Evaluator (Logic Layer)
+
+- **Engine:** LangChain + Local LLM (Llama 3/Ollama).
+- **Function:** Performs a multi-point comparison between Job Descriptions (JD) and a JSON Master Profile.
+- **Scoring:** Outputs a 0-100 "Fit Score" based on tech stack (AWS, MS SQL, Next.js), experience (20+ years), and education (MSCS).
+
+### 3. The Dashboard (Human-in-the-Loop)
+
+- **Engine:** Next.js (Mountain Modern Slate & Teal UI).
+- **Function:** A centralized "Recruiter Command Center" to review, edit, and approve ranked opportunities.
+
+### 4. The Applier (Execution Layer)
+
+- **Engine:** Playwright + Headless LaTeX.
+- **Function:** Dynamically generates a custom, ATS-optimized PDF for every application and automates form entry on platforms like Workday and Lever.
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Orchestration | Coolify (Self-Hosted CI/CD) |
+| Infrastructure | Hetzner Dedicated (Ubuntu 24.04) |
+| Frontend | Next.js + Tailwind CSS |
+| Database | PostgreSQL |
+| Agentic AI | LangChain / Python |
+| Identity | Authentik (OIDC) |
+
+## Data Sovereignty & Security
+
+Unlike third-party "Auto-Apply" SaaS tools, Blueprint prioritizes security:
+
+- **Privacy:** Your 20-year career history and PII never leave your private server.
+- **Identity:** All administrative access is guarded by Authentik SSO.
+- **Integrity:** Uses signed Webhooks for CI/CD updates from GitHub to Coolify.
+
+## Getting Started
+
+1. **Define Master Profile:** Populate `/data/master_profile.json` with your full technical history.
+2. **Environment Setup:** Configure `.env` with LinkedIn/Indeed credentials and Ollama API endpoints.
+3. **Deploy:** Push to GitHub to trigger the Coolify automatic build pipeline.
+
+## Architecture
+
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
+*Built in Walsenburg, CO. Architecting the future of technical career transitions.*
