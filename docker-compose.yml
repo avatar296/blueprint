@@ -36,7 +36,9 @@ services:
       - blueprint-net
 
   scout:
-    build: ./services/scout
+    build:
+      context: ./services
+      dockerfile: scout/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -44,15 +46,26 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
       SCOUT_INTERVAL_MINUTES: ${SCOUT_INTERVAL_MINUTES:-60}
-      LINKEDIN_EMAIL: ${LINKEDIN_EMAIL:-}
-      LINKEDIN_PASSWORD: ${LINKEDIN_PASSWORD:-}
-      INDEED_EMAIL: ${INDEED_EMAIL:-}
-      INDEED_PASSWORD: ${INDEED_PASSWORD:-}
+      SCOUT_MAX_AGE_DAYS: ${SCOUT_MAX_AGE_DAYS:-30}
+      SCOUT_MAX_DISCOVERY_PROBES: ${SCOUT_MAX_DISCOVERY_PROBES:-10}
+      SCOUT_CONTACT_EMAIL: ${SCOUT_CONTACT_EMAIL:-}
+      SCOUT_SOURCING_INTERVAL_HOURS: ${SCOUT_SOURCING_INTERVAL_HOURS:-168}
+      SCOUT_MIN_EMPLOYEES: ${SCOUT_MIN_EMPLOYEES:-}
+      SCOUT_MAX_EMPLOYEES: ${SCOUT_MAX_EMPLOYEES:-}
+      SCOUT_FOUNDED_AFTER: ${SCOUT_FOUNDED_AFTER:-}
+      SCOUT_FILTER_STATES: ${SCOUT_FILTER_STATES:-}
+      SCOUT_FILTER_INDUSTRIES: ${SCOUT_FILTER_INDUSTRIES:-}
+      CAREERONESTOP_USER_ID: ${CAREERONESTOP_USER_ID:-}
+      CAREERONESTOP_API_TOKEN: ${CAREERONESTOP_API_TOKEN:-}
+    volumes:
+      - ./data:/app/data:ro
     networks:
       - blueprint-net
 
   evaluator:
-    build: ./services/evaluator
+    build:
+      context: ./services
+      dockerfile: evaluator/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -61,13 +74,16 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       EVALUATOR_INTERVAL_MINUTES: ${EVALUATOR_INTERVAL_MINUTES:-5}
+      EVALUATOR_STALENESS_DAYS: ${EVALUATOR_STALENESS_DAYS:-14}
     volumes:
       - ./data:/app/data:ro
     networks:
       - blueprint-net
 
   applier:
-    build: ./services/applier
+    build:
+      context: ./services
+      dockerfile: applier/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:

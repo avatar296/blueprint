@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Blueprint Applier — automated application submission service"
 requires-python = ">=3.12"
 dependencies = [
+    "blueprint-common>=0.1.0",
     "playwright>=1.49",
-    "psycopg[binary]>=3.2",
     "python-dotenv>=1.0",
     "Jinja2>=3.1",
 ]

@@ -11,10 +11,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base texlive-latex-recommended texlive-latex-extra \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
+COPY common/ /tmp/common/
+RUN pip install --no-cache-dir /tmp/common/
+
+COPY applier/pyproject.toml .
 RUN pip install --no-cache-dir . && \
     playwright install chromium
 
-COPY src/ src/
+COPY applier/src/ src/
 
 CMD ["python", "-m", "applier.main"]
