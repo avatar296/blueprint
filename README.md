@@ -34,14 +34,19 @@ Blueprint is designed with a decoupled, containerized architecture managed via C
 
 ## Tech Stack
 
-| Component | Technology |
-|---|---|
-| Orchestration | Coolify (Self-Hosted CI/CD) |
-| Infrastructure | Hetzner Dedicated (Ubuntu 24.04) |
-| Frontend | Next.js + Tailwind CSS |
-| Database | PostgreSQL |
-| Agentic AI | LangChain / Python |
-| Identity | Authentik (OIDC) |
+| Component | Technology | Version |
+|---|---|---|
+| Database | PostgreSQL | 16 (alpine) |
+| Backend | Python | 3.12 (slim) |
+| Frontend | Next.js + React | 15 / 19 |
+| Styling | Tailwind CSS | 4 |
+| Browser Automation | Playwright | ≥1.49 |
+| AI/LLM | LangChain + Ollama (Llama 3) | ≥0.3 |
+| PDF Generation | LaTeX (TeX Live) + Jinja2 | ≥3.1 |
+| Runtime | Node.js | 20 (alpine) |
+| Identity | Authentik (OIDC) | Deferred |
+| Infrastructure | Hetzner Dedicated | Ubuntu 24.04 |
+| Orchestration | Docker Compose (dev) / Coolify (prod) | — |
 
 ## Data Sovereignty & Security
 
@@ -53,9 +58,32 @@ Unlike third-party "Auto-Apply" SaaS tools, Blueprint prioritizes security:
 
 ## Getting Started
 
-1. **Define Master Profile:** Populate `/data/master_profile.json` with your full technical history.
-2. **Environment Setup:** Configure `.env` with LinkedIn/Indeed credentials and Ollama API endpoints.
-3. **Deploy:** Push to GitHub to trigger the Coolify automatic build pipeline.
+1. **Clone the repo:**
+   ```bash
+   git clone https://github.com/your-org/blueprint.git && cd blueprint
+   ```
+
+2. **Configure environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env — set POSTGRES_PASSWORD and any job board credentials
+   ```
+
+3. **Define Master Profile:** Populate `data/master_profile.json` with your full technical history.
+
+4. **Start all services:**
+   ```bash
+   docker compose up --build
+   ```
+
+5. **Pull the LLM model:**
+   ```bash
+   docker compose exec ollama ollama pull llama3
+   ```
+
+6. **Open the Dashboard:** [http://localhost:3000](http://localhost:3000)
+
+For production deployment, push to GitHub to trigger the Coolify automatic build pipeline.
 
 ## Architecture
 

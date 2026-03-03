@@ -26,11 +26,34 @@ Four decoupled, containerized layers:
 - **Infrastructure:** Hetzner dedicated server (Ubuntu 24.04)
 - **Deployment:** Coolify (self-hosted CI/CD), GitHub webhook triggers
 
+## Project Structure
+
+```
+blueprint/
+├── docker-compose.yml              # All services, DB, Ollama
+├── .env.example                    # Environment variable template
+├── data/
+│   └── master_profile.json         # Career profile (gitignored)
+├── db/
+│   └── init/001_schema.sql         # PostgreSQL schema (jobs table, enums)
+├── docs/
+│   └── adr/                        # Architecture Decision Records
+└── services/
+    ├── scout/                      # Python + Playwright scraper
+    ├── evaluator/                  # Python + LangChain scorer
+    ├── applier/                    # Python + LaTeX + Playwright
+    └── dashboard/                  # Next.js + Tailwind CSS
+```
+
 ## Key Data Files
 
 - `/data/master_profile.json` — 20-year technical career profile used for JD scoring
+- `docker-compose.yml` — Service orchestration (PostgreSQL, Ollama, all 4 services)
+- `.env.example` — Environment variable template (copy to `.env`)
+- `db/init/001_schema.sql` — PostgreSQL schema (jobs table, status enum, indexes)
+- `docs/adr/` — Architecture Decision Records (10 ADRs documenting key choices)
 - `ARCHITECTURE.md` — Detailed system architecture, data flow, deployment topology, and security model
-- `.env` — LinkedIn/Indeed credentials, Ollama API endpoints
+- `.env` — LinkedIn/Indeed credentials, Ollama API endpoints (gitignored)
 
 ## Build & Run Commands
 
