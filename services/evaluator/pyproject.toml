@@ -1,0 +1,18 @@
+[project]
+name = "blueprint-evaluator"
+version = "0.1.0"
+description = "Blueprint Evaluator — LLM-powered job scoring service"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=0.3",
+    "langchain-ollama>=0.3",
+    "psycopg[binary]>=3.2",
+    "python-dotenv>=1.0",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,116 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-blueprint}
+      POSTGRES_USER: ${POSTGRES_USER:-blueprint}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-blueprint}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - blueprint-net
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    # Uncomment for NVIDIA GPU passthrough:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    networks:
+      - blueprint-net
+
+  scout:
+    build: ./services/scout
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+      SCOUT_INTERVAL_MINUTES: ${SCOUT_INTERVAL_MINUTES:-60}
+      LINKEDIN_EMAIL: ${LINKEDIN_EMAIL:-}
+      LINKEDIN_PASSWORD: ${LINKEDIN_PASSWORD:-}
+      INDEED_EMAIL: ${INDEED_EMAIL:-}
+      INDEED_PASSWORD: ${INDEED_PASSWORD:-}
+    networks:
+      - blueprint-net
+
+  evaluator:
+    build: ./services/evaluator
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      EVALUATOR_INTERVAL_MINUTES: ${EVALUATOR_INTERVAL_MINUTES:-5}
+    volumes:
+      - ./data:/app/data:ro
+    networks:
+      - blueprint-net
+
+  applier:
+    build: ./services/applier
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+    volumes:
+      - ./data:/app/data:ro
+    networks:
+      - blueprint-net
+
+  dashboard:
+    build: ./services/dashboard
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-production}
+      # Authentik OIDC (uncomment when ready):
+      # AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-}
+      # AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-}
+      # AUTHENTIK_CLIENT_SECRET: ${AUTHENTIK_CLIENT_SECRET:-}
+    networks:
+      - blueprint-net
+
+  # Authentik (OIDC provider) — uncomment when ready for production auth.
+  # See: https://docs.goauthentik.io/docs/install-config/install/docker-compose
+  # authentik-server:
+  #   image: ghcr.io/goauthentik/server:latest
+  #   ...
+  # authentik-worker:
+  #   image: ghcr.io/goauthentik/server:latest
+  #   ...
+
+volumes:
+  pg_data:
+  ollama_models:
+
+networks:
+  blueprint-net:
+    driver: bridge

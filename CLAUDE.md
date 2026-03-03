@@ -32,8 +32,39 @@ Four decoupled, containerized layers:
 - `ARCHITECTURE.md` — Detailed system architecture, data flow, deployment topology, and security model
 - `.env` — LinkedIn/Indeed credentials, Ollama API endpoints
 
+## Build & Run Commands
+
+### Full Stack (Docker)
+- `docker compose up --build` — build and start all services
+- `docker compose down` — stop all services
+- `docker compose down -v` — stop and remove volumes (resets DB)
+- `docker compose logs -f <service>` — tail logs for a service
+
+### Scout (Python)
+- `cd services/scout && pip install -e .` — install in dev mode
+- `python -m scout.main` — run locally
+- `ruff check src/` — lint
+- `pytest` — run tests
+
+### Evaluator (Python)
+- `cd services/evaluator && pip install -e .` — install in dev mode
+- `python -m evaluator.main` — run locally
+- `ruff check src/` — lint
+- `pytest` — run tests
+
+### Applier (Python)
+- `cd services/applier && pip install -e .` — install in dev mode
+- `python -m applier.main` — run locally
+- `ruff check src/` — lint
+- `pytest` — run tests
+
+### Dashboard (Next.js)
+- `cd services/dashboard && npm install` — install dependencies
+- `npm run dev` — start dev server on :3000
+- `npm run build` — production build
+- `npm run lint` — lint
+
 ## Development Notes
 
-- No build/test/lint commands yet — will be added as code matures
 - All data stays on the private Hetzner server (data sovereignty by design)
 - CI/CD: push to GitHub triggers Coolify automatic build pipeline via signed webhooks
