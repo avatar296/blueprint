@@ -176,7 +176,7 @@ def run_cycle(force_sourcing: bool = False) -> int:
     if force_sourcing:
         log.info("=== Phase 0: Company sourcing ===")
         try:
-            run_sourcing()
+            run_sourcing(source_batch_limit=config.source_batch_limit)
         except Exception:
             log.error("Sourcing phase failed", exc_info=True)
 

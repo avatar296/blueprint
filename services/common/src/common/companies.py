@@ -23,6 +23,12 @@ def upsert_company(
     industry: str | None = None,
     sic_code: str | None = None,
     website: str | None = None,
+    ticker: str | None = None,
+    exchange: str | None = None,
+    filer_category: str | None = None,
+    total_assets: int | None = None,
+    naics_code: str | None = None,
+    description: str | None = None,
 ) -> UUID:
     """Insert or update a company, preserving existing data via COALESCE.
 
@@ -35,28 +41,38 @@ def upsert_company(
             INSERT INTO companies (
                 name, normalized_name, source, source_id,
                 employee_count, date_founded, state, city,
-                industry, sic_code, website
+                industry, sic_code, website,
+                ticker, exchange, filer_category, total_assets, naics_code, description
             ) VALUES (
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s
+                %s, %s, %s,
+                %s, %s, %s, %s, %s, %s
             )
-            ON CONFLICT (normalized_name, source) DO UPDATE SET
+            ON CONFLICT (normalized_name) DO UPDATE SET
                 name            = COALESCE(EXCLUDED.name, companies.name),
-                source_id       = COALESCE(EXCLUDED.source_id, companies.source_id),
+                source          = COALESCE(companies.source, EXCLUDED.source),
+                source_id       = COALESCE(companies.source_id, EXCLUDED.source_id),
                 employee_count  = COALESCE(EXCLUDED.employee_count, companies.employee_count),
                 date_founded    = COALESCE(EXCLUDED.date_founded, companies.date_founded),
                 state           = COALESCE(EXCLUDED.state, companies.state),
                 city            = COALESCE(EXCLUDED.city, companies.city),
                 industry        = COALESCE(EXCLUDED.industry, companies.industry),
                 sic_code        = COALESCE(EXCLUDED.sic_code, companies.sic_code),
-                website         = COALESCE(EXCLUDED.website, companies.website)
+                website         = COALESCE(EXCLUDED.website, companies.website),
+                ticker          = COALESCE(EXCLUDED.ticker, companies.ticker),
+                exchange        = COALESCE(EXCLUDED.exchange, companies.exchange),
+                filer_category  = COALESCE(EXCLUDED.filer_category, companies.filer_category),
+                total_assets    = COALESCE(EXCLUDED.total_assets, companies.total_assets),
+                naics_code      = COALESCE(EXCLUDED.naics_code, companies.naics_code),
+                description     = COALESCE(EXCLUDED.description, companies.description)
             RETURNING id
             """,
             (
                 name, normalized_name, source, source_id,
                 employee_count, date_founded, state, city,
                 industry, sic_code, website,
+                ticker, exchange, filer_category, total_assets, naics_code, description,
             ),
         ).fetchone()
     return row[0]

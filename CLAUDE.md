@@ -53,7 +53,7 @@ blueprint/
 - `db/init/001_schema.sql` — PostgreSQL schema (jobs table, status enum, indexes)
 - `docs/adr/` — Architecture Decision Records (10 ADRs documenting key choices)
 - `ARCHITECTURE.md` — Detailed system architecture, data flow, deployment topology, and security model
-- `.env` — LinkedIn/Indeed credentials, Ollama API endpoints (gitignored)
+- `.env` — Ollama API endpoints and service config (gitignored)
 
 ## Build & Run Commands
 
@@ -63,23 +63,18 @@ blueprint/
 - `docker compose down -v` — stop and remove volumes (resets DB)
 - `docker compose logs -f <service>` — tail logs for a service
 
-### Scout (Python)
-- `cd services/scout && pip install -e .` — install in dev mode
-- `python -m scout.main` — run locally
-- `ruff check src/` — lint
-- `pytest` — run tests
+### Python Dev Setup (one-time)
+- `curl -LsSf https://astral.sh/uv/install.sh | sh` — install uv
+- `uv sync` — create .venv, install all packages (editable) + dev tools
+- `uv run playwright install chromium` — install browser for applier
 
-### Evaluator (Python)
-- `cd services/evaluator && pip install -e .` — install in dev mode
-- `python -m evaluator.main` — run locally
-- `ruff check src/` — lint
-- `pytest` — run tests
-
-### Applier (Python)
-- `cd services/applier && pip install -e .` — install in dev mode
-- `python -m applier.main` — run locally
-- `ruff check src/` — lint
-- `pytest` — run tests
+### Python Services (all use the root .venv)
+- `uv run python -m scout.main` — run scout locally
+- `uv run python -m evaluator.main` — run evaluator locally
+- `uv run python -m applier.main` — run applier locally
+- `uv run ruff check services/` — lint all Python services
+- `uv run pytest` — run all tests
+- `uv sync` — re-sync after changing any pyproject.toml
 
 ### Dashboard (Next.js)
 - `cd services/dashboard && npm install` — install dependencies
@@ -91,3 +86,4 @@ blueprint/
 
 - All data stays on the private Hetzner server (data sovereignty by design)
 - CI/CD: push to GitHub triggers Coolify automatic build pipeline via signed webhooks
+- Python dev environment uses a single root `.venv` managed by `uv` workspace. Run `uv sync` after pulling.

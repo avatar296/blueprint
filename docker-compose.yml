@@ -19,100 +19,115 @@ services:
     networks:
       - blueprint-net
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama_models:/root/.ollama
-    # Uncomment for NVIDIA GPU passthrough:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-    networks:
-      - blueprint-net
-
-  scout:
-    build:
-      context: ./services
-      dockerfile: scout/Dockerfile
+  pgadmin:
+    image: dpage/pgadmin4:latest
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
-      SCOUT_INTERVAL_MINUTES: ${SCOUT_INTERVAL_MINUTES:-60}
-      SCOUT_MAX_AGE_DAYS: ${SCOUT_MAX_AGE_DAYS:-30}
-      SCOUT_MAX_DISCOVERY_PROBES: ${SCOUT_MAX_DISCOVERY_PROBES:-10}
-      SCOUT_CONTACT_EMAIL: ${SCOUT_CONTACT_EMAIL:-}
-      SCOUT_SOURCING_INTERVAL_HOURS: ${SCOUT_SOURCING_INTERVAL_HOURS:-168}
-      SCOUT_MIN_EMPLOYEES: ${SCOUT_MIN_EMPLOYEES:-}
-      SCOUT_MAX_EMPLOYEES: ${SCOUT_MAX_EMPLOYEES:-}
-      SCOUT_FOUNDED_AFTER: ${SCOUT_FOUNDED_AFTER:-}
-      SCOUT_FILTER_STATES: ${SCOUT_FILTER_STATES:-}
-      SCOUT_FILTER_INDUSTRIES: ${SCOUT_FILTER_INDUSTRIES:-}
-      CAREERONESTOP_USER_ID: ${CAREERONESTOP_USER_ID:-}
-      CAREERONESTOP_API_TOKEN: ${CAREERONESTOP_API_TOKEN:-}
-    volumes:
-      - ./data:/app/data:ro
-    networks:
-      - blueprint-net
-
-  evaluator:
-    build:
-      context: ./services
-      dockerfile: evaluator/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      EVALUATOR_INTERVAL_MINUTES: ${EVALUATOR_INTERVAL_MINUTES:-5}
-      EVALUATOR_STALENESS_DAYS: ${EVALUATOR_STALENESS_DAYS:-14}
-    volumes:
-      - ./data:/app/data:ro
-    networks:
-      - blueprint-net
-
-  applier:
-    build:
-      context: ./services
-      dockerfile: applier/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
-    volumes:
-      - ./data:/app/data:ro
-    networks:
-      - blueprint-net
-
-  dashboard:
-    build: ./services/dashboard
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@blueprint.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_LISTEN_PORT: 5050
     ports:
-      - "${DASHBOARD_PORT:-3000}:3000"
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-production}
-      # Authentik OIDC (uncomment when ready):
-      # AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-}
-      # AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-}
-      # AUTHENTIK_CLIENT_SECRET: ${AUTHENTIK_CLIENT_SECRET:-}
+      - "${PGADMIN_PORT:-5050}:5050"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     networks:
       - blueprint-net
+
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   # Uncomment for NVIDIA GPU passthrough:
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: all
+  #   #           capabilities: [gpu]
+  #   networks:
+  #     - blueprint-net
+
+  # scout:
+  #   build:
+  #     context: ./services
+  #     dockerfile: scout/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+  #     SCOUT_INTERVAL_MINUTES: ${SCOUT_INTERVAL_MINUTES:-60}
+  #     SCOUT_MAX_AGE_DAYS: ${SCOUT_MAX_AGE_DAYS:-30}
+  #     SCOUT_MAX_DISCOVERY_PROBES: ${SCOUT_MAX_DISCOVERY_PROBES:-10}
+  #     SCOUT_CONTACT_EMAIL: ${SCOUT_CONTACT_EMAIL:-}
+  #     SCOUT_SOURCING_INTERVAL_HOURS: ${SCOUT_SOURCING_INTERVAL_HOURS:-168}
+  #     SCOUT_MIN_EMPLOYEES: ${SCOUT_MIN_EMPLOYEES:-}
+  #     SCOUT_MAX_EMPLOYEES: ${SCOUT_MAX_EMPLOYEES:-}
+  #     SCOUT_FOUNDED_AFTER: ${SCOUT_FOUNDED_AFTER:-}
+  #     SCOUT_FILTER_STATES: ${SCOUT_FILTER_STATES:-}
+  #     SCOUT_FILTER_INDUSTRIES: ${SCOUT_FILTER_INDUSTRIES:-}
+  #   volumes:
+  #     - ./data:/app/data:ro
+  #   networks:
+  #     - blueprint-net
+
+  # evaluator:
+  #   build:
+  #     context: ./services
+  #     dockerfile: evaluator/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+  #     OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+  #     EVALUATOR_INTERVAL_MINUTES: ${EVALUATOR_INTERVAL_MINUTES:-5}
+  #     EVALUATOR_STALENESS_DAYS: ${EVALUATOR_STALENESS_DAYS:-14}
+  #   volumes:
+  #     - ./data:/app/data:ro
+  #   networks:
+  #     - blueprint-net
+
+  # applier:
+  #   build:
+  #     context: ./services
+  #     dockerfile: applier/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+  #   volumes:
+  #     - ./data:/app/data:ro
+  #   networks:
+  #     - blueprint-net
+
+  # dashboard:
+  #   build: ./services/dashboard
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   ports:
+  #     - "${DASHBOARD_PORT:-3000}:3000"
+  #   environment:
+  #     DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+  #     NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+  #     NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-production}
+  #     # Authentik OIDC (uncomment when ready):
+  #     # AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-}
+  #     # AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-}
+  #     # AUTHENTIK_CLIENT_SECRET: ${AUTHENTIK_CLIENT_SECRET:-}
+  #   networks:
+  #     - blueprint-net
 
   # Authentik (OIDC provider) — uncomment when ready for production auth.
   # See: https://docs.goauthentik.io/docs/install-config/install/docker-compose
@@ -125,6 +140,7 @@ services:
 
 volumes:
   pg_data:
+  pgadmin_data:
   ollama_models:
 
 networks:

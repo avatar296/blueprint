@@ -21,6 +21,9 @@ class ScoutConfig:
     roles: list[str] = field(default_factory=lambda: list(_DEFAULT_ROLES))
     max_age_days: int = 30
 
+    # Sourcing batch limit (0 = unlimited)
+    source_batch_limit: int = 0
+
     # Catalog filtering (applied to fetch_filtered_discoveries)
     min_employees: int | None = None
     max_employees: int | None = None
@@ -54,6 +57,9 @@ def load_config() -> ScoutConfig:
     if env_max_age := os.getenv("SCOUT_MAX_AGE_DAYS"):
         cfg.max_age_days = int(env_max_age)
 
+    if env_batch := os.getenv("SCOUT_SOURCE_BATCH_LIMIT"):
+        cfg.source_batch_limit = int(env_batch)
+
     # Catalog filtering env vars
     if env_min := os.getenv("SCOUT_MIN_EMPLOYEES"):
         cfg.min_employees = int(env_min)
@@ -71,9 +77,10 @@ def load_config() -> ScoutConfig:
         cfg.filter_industries = [i.strip() for i in env_industries.split(",") if i.strip()]
 
     log.info(
-        "Config: %d roles, max_age=%dd, filters: employees=%s-%s, states=%s, industries=%s",
+        "Config: %d roles, max_age=%dd, batch_limit=%s, filters: employees=%s-%s, states=%s, industries=%s",
         len(cfg.roles),
         cfg.max_age_days,
+        cfg.source_batch_limit or "unlimited",
         cfg.min_employees or "any",
         cfg.max_employees or "any",
         cfg.filter_states or "all",

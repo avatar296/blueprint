@@ -57,11 +57,16 @@ class WikidataSource(CompanySource):
 
     name = "wikidata"
 
-    def fetch(self) -> list[CompanyRecord]:
+    def fetch(self, max_records: int = 0) -> list[CompanyRecord]:
+        query = _SPARQL_QUERY
+        if max_records > 0:
+            # Over-fetch to account for dedup, then cap in the loop below
+            query += f"\nLIMIT {max_records * 2}"
+
         try:
             resp = httpx.get(
                 _SPARQL_ENDPOINT,
-                params={"query": _SPARQL_QUERY, "format": "json"},
+                params={"query": query, "format": "json"},
                 headers={"User-Agent": "Blueprint/1.0 (job-search-tool)"},
                 timeout=120.0,
             )
@@ -89,7 +94,10 @@ class WikidataSource(CompanySource):
                 continue
 
             employees_str = _val(binding, "employees")
-            employees = int(float(employees_str)) if employees_str else None
+            try:
+                employees = int(float(employees_str)) if employees_str else None
+            except (ValueError, TypeError):
+                employees = None
 
             inception_str = _val(binding, "inception")
             date_founded = None
@@ -115,6 +123,9 @@ class WikidataSource(CompanySource):
                 industry=industry,
                 website=website,
             ))
+
+            if max_records > 0 and len(records) >= max_records:
+                break
 
         log.info("Wikidata: %d unique companies after dedup", len(records))
         return records

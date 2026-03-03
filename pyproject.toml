@@ -1,0 +1,31 @@
+[project]
+name = "blueprint"
+version = "0.1.0"
+description = "Blueprint monorepo — automated job acquisition engine"
+requires-python = ">=3.12"
+dependencies = [
+    "blueprint-common>=0.1.0",
+    "blueprint-scout>=0.1.0",
+    "blueprint-evaluator>=0.1.0",
+    "blueprint-applier>=0.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "services/common",
+    "services/scout",
+    "services/evaluator",
+    "services/applier",
+]
+
+[tool.uv.sources]
+blueprint-common = { workspace = true }
+blueprint-scout = { workspace = true }
+blueprint-evaluator = { workspace = true }
+blueprint-applier = { workspace = true }

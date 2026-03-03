@@ -2,7 +2,9 @@
 
 import logging
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 
@@ -12,11 +14,16 @@ log = logging.getLogger("scout.sourcing.sec_edgar")
 
 # SEC requires a User-Agent with contact email
 _FRAMES_URL = (
-    "https://data.sec.gov/api/xbrl/companyfacts/frames/"
-    "us-gaap/EntityNumberOfEmployees/USD/CY{year}.json"
+    "https://data.sec.gov/api/xbrl/frames/"
+    "us-gaap/Assets/USD/CY{year}Q{quarter}I.json"
+)
+_EMPLOYEE_FRAMES_URL = (
+    "https://data.sec.gov/api/xbrl/frames/"
+    "dei/EntityNumberOfEmployees/pure/CY{year}I.json"
 )
 _SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
-_REQUEST_DELAY = 0.1  # 10 req/s limit
+_ENRICH_WORKERS = 4   # parallel enrichment threads
+_ENRICH_RATE = 9.0    # max requests/sec (SEC allows 10; leave headroom)
 
 # Top-level SIC code → industry name mapping
 SIC_INDUSTRY: dict[str, str] = {
@@ -264,6 +271,30 @@ SIC_INDUSTRY: dict[str, str] = {
 }
 
 
+class _TokenBucket:
+    """Thread-safe token bucket rate limiter."""
+
+    def __init__(self, rate: float) -> None:
+        self._rate = rate
+        self._tokens = rate
+        self._last = time.monotonic()
+        self._lock = threading.Lock()
+
+    def acquire(self) -> None:
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                self._tokens = min(
+                    self._rate,
+                    self._tokens + (now - self._last) * self._rate,
+                )
+                self._last = now
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return
+            time.sleep(0.01)
+
+
 def _sic_to_industry(sic: str) -> str | None:
     """Look up industry name from SIC code, trying exact match then prefix."""
     if not sic:
@@ -308,7 +339,7 @@ class SecEdgarSource(CompanySource):
             "Accept": "application/json",
         }
 
-    def fetch(self) -> list[CompanyRecord]:
+    def fetch(self, max_records: int = 0) -> list[CompanyRecord]:
         if not self._contact_email:
             log.error("Cannot fetch SEC EDGAR without SCOUT_CONTACT_EMAIL")
             return []
@@ -316,62 +347,147 @@ class SecEdgarSource(CompanySource):
         records = self._fetch_frames()
         log.info("SEC EDGAR: fetched %d companies from Frames API", len(records))
 
-        # Enrich with submissions data (state, SIC, founding)
+        # Bulk-merge employee counts from the DEI Frames endpoint
+        emp_counts = self._fetch_employee_counts()
+        if emp_counts:
+            merged = 0
+            for rec in records:
+                if rec.source_id and rec.source_id in emp_counts:
+                    rec.employee_count = emp_counts[rec.source_id]
+                    merged += 1
+            log.info("SEC EDGAR: merged employee counts for %d/%d companies", merged, len(records))
+
+        # Apply batch limit before the expensive per-company enrichment loop
+        if max_records > 0:
+            records = records[:max_records]
+            log.info("SEC EDGAR: limited to %d companies for enrichment", len(records))
+
+        # Enrich with submissions data (state, SIC, founding) — parallel with rate limit
+        bucket = _TokenBucket(rate=_ENRICH_RATE)
+
+        def _enrich_one(rec: CompanyRecord) -> bool:
+            bucket.acquire()
+            return self._enrich_from_submissions(rec)
+
         enriched = 0
-        for rec in records:
-            if self._enrich_from_submissions(rec):
-                enriched += 1
-            time.sleep(_REQUEST_DELAY)
+        with ThreadPoolExecutor(max_workers=_ENRICH_WORKERS) as executor:
+            futures = {executor.submit(_enrich_one, rec): rec for rec in records}
+            for future in as_completed(futures):
+                try:
+                    if future.result():
+                        enriched += 1
+                except Exception:
+                    rec = futures[future]
+                    log.debug("Enrichment failed for CIK %s", rec.source_id, exc_info=True)
 
         log.info("SEC EDGAR: enriched %d/%d companies from Submissions API", enriched, len(records))
         return records
 
-    def _fetch_frames(self) -> list[CompanyRecord]:
-        """Fetch employee count data from XBRL Frames API.
+    def _fetch_employee_counts(self) -> dict[str, int]:
+        """Fetch employee counts from the DEI XBRL Frames endpoint.
 
-        Tries current year first, then previous year (filings lag).
+        Tries current year, then the prior 2 years (annual filings lag).
+        Returns a dict mapping CIK (string) → employee count.
         """
         import datetime
 
-        current_year = datetime.date.today().year
-        records: list[CompanyRecord] = []
+        today = datetime.date.today()
+        counts: dict[str, int] = {}
 
-        for year in [current_year, current_year - 1]:
-            url = _FRAMES_URL.format(year=year)
+        for year in range(today.year, today.year - 3, -1):
+            url = _EMPLOYEE_FRAMES_URL.format(year=year)
             try:
                 resp = httpx.get(url, headers=self._headers(), timeout=30.0)
                 if resp.status_code != 200:
-                    log.debug("Frames API returned %d for year %d", resp.status_code, year)
+                    log.debug("Employee Frames returned %d for CY%d", resp.status_code, year)
                     continue
 
                 data = resp.json()
-                units = data.get("data", [])
-                if not units:
+                entries = data.get("data", [])
+                if not entries:
                     continue
 
-                for entry in units:
+                for entry in entries:
+                    cik = str(entry.get("cik", ""))
+                    val = entry.get("val")
+                    if cik and val is not None:
+                        try:
+                            count = int(val)
+                            if count > 0:
+                                counts[cik] = count
+                        except (TypeError, ValueError):
+                            pass
+
+                if counts:
+                    log.info("SEC EDGAR: got %d employee counts from CY%d", len(counts), year)
+                    break  # got data, no need to try older years
+
+            except (httpx.HTTPError, ValueError) as exc:
+                log.warning("Employee Frames API error for CY%d: %s", year, exc)
+
+        return counts
+
+    def _fetch_frames(self) -> list[CompanyRecord]:
+        """Fetch public-company universe from XBRL Frames API (Assets, instantaneous).
+
+        Tries recent quarters working backwards until data is found (filings lag).
+        """
+        import datetime
+
+        today = datetime.date.today()
+        # Build candidate (year, quarter) pairs: current quarter back ~4 quarters
+        candidates: list[tuple[int, int]] = []
+        year, quarter = today.year, (today.month - 1) // 3 + 1
+        for _ in range(5):
+            candidates.append((year, quarter))
+            quarter -= 1
+            if quarter == 0:
+                quarter = 4
+                year -= 1
+
+        records: list[CompanyRecord] = []
+
+        for yr, qtr in candidates:
+            url = _FRAMES_URL.format(year=yr, quarter=qtr)
+            try:
+                resp = httpx.get(url, headers=self._headers(), timeout=30.0)
+                if resp.status_code != 200:
+                    log.debug("Frames API returned %d for %dQ%d", resp.status_code, yr, qtr)
+                    continue
+
+                data = resp.json()
+                entries = data.get("data", [])
+                if not entries:
+                    continue
+
+                for entry in entries:
                     cik = str(entry.get("cik", ""))
                     name = entry.get("entityName", "")
-                    val = entry.get("val")
 
                     if not name or not cik:
                         continue
-                    if val is not None and val <= 0:
-                        continue
+
+                    # val is total assets in USD from the Frames response
+                    total_assets = entry.get("val")
+                    if total_assets is not None:
+                        try:
+                            total_assets = int(total_assets)
+                        except (TypeError, ValueError):
+                            total_assets = None
 
                     records.append(CompanyRecord(
                         name=name,
                         source="sec_edgar",
                         source_id=cik,
-                        employee_count=int(val) if val else None,
+                        total_assets=total_assets,
                     ))
 
                 if records:
-                    log.info("Using SEC EDGAR Frames data from year %d", year)
-                    break  # got data, no need to try previous year
+                    log.info("Using SEC EDGAR Frames data from %dQ%d", yr, qtr)
+                    break  # got data, no need to try older quarters
 
             except (httpx.HTTPError, ValueError) as exc:
-                log.warning("SEC EDGAR Frames API error for year %d: %s", year, exc)
+                log.warning("SEC EDGAR Frames API error for %dQ%d: %s", yr, qtr, exc)
 
         return records
 
@@ -391,16 +507,26 @@ class SecEdgarSource(CompanySource):
 
             data = resp.json()
 
-            # State of incorporation
-            state_raw = data.get("stateOfIncorporation", "")
-            if state_raw and state_raw in _SEC_STATE_MAP:
-                record.state = _SEC_STATE_MAP[state_raw]
+            # Business address (actual HQ, not state of incorporation)
+            biz_addr = data.get("addresses", {}).get("business", {})
+            biz_city = biz_addr.get("city", "")
+            biz_state = biz_addr.get("stateOrCountry", "")
+            if biz_state and biz_state in _SEC_STATE_MAP:
+                record.state = _SEC_STATE_MAP[biz_state]
+                if biz_city:
+                    record.city = biz_city.strip().title()
+            elif not record.state:
+                # Fall back to stateOfIncorporation only if no business address
+                state_raw = data.get("stateOfIncorporation", "")
+                if state_raw and state_raw in _SEC_STATE_MAP:
+                    record.state = _SEC_STATE_MAP[state_raw]
 
-            # SIC code and industry
+            # SIC code and industry — prefer sicDescription from API when available
             sic = str(data.get("sic", ""))
             if sic:
                 record.sic_code = sic
-                record.industry = _sic_to_industry(sic)
+                sic_desc = data.get("sicDescription", "")
+                record.industry = sic_desc if sic_desc else _sic_to_industry(sic)
 
             # Website
             website = data.get("website", "")
@@ -408,6 +534,24 @@ class SecEdgarSource(CompanySource):
                 if not website.startswith("http"):
                     website = f"https://{website}"
                 record.website = website
+
+            # Ticker and exchange
+            tickers = data.get("tickers", [])
+            if tickers:
+                record.ticker = tickers[0]
+            exchanges = data.get("exchanges", [])
+            if exchanges:
+                record.exchange = exchanges[0]
+
+            # Filer category (size proxy)
+            category = data.get("category", "")
+            if category:
+                record.filer_category = category
+
+            # Description
+            desc = data.get("description", "")
+            if desc:
+                record.description = desc
 
             return True
 
