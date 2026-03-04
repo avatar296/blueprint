@@ -1,5 +1,6 @@
 """Wikidata SPARQL company sourcing — employee count, inception, HQ location, website, industry."""
 
+import datetime
 import logging
 
 import httpx
@@ -102,8 +103,11 @@ class WikidataSource(CompanySource):
             inception_str = _val(binding, "inception")
             date_founded = None
             if inception_str:
-                # Wikidata returns ISO datetime, take just the date part
-                date_founded = inception_str[:10]
+                try:
+                    datetime.date.fromisoformat(inception_str[:10])
+                    date_founded = inception_str[:10]
+                except ValueError:
+                    pass
 
             city = _val(binding, "hqCityLabel")
             state_label = _val(binding, "hqStateLabel")

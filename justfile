@@ -32,6 +32,22 @@ db-query sql:
 db-shell:
     docker compose exec postgres psql -U {{db_user}} -d {{db_name}}
 
+# Create a compressed pg_dump snapshot in backups/
+db-backup:
+    mkdir -p backups
+    docker compose exec postgres pg_dump -Fc -U {{db_user}} {{db_name}} > backups/blueprint_$(date +%Y-%m-%d_%H%M%S).dump
+    @echo "Backup saved to backups/"
+    @ls -lh backups/*.dump | tail -1
+
+# Restore from a backup file: just db-restore blueprint_2025-01-01_120000.dump
+db-restore file:
+    docker compose exec -T postgres pg_restore --clean --if-exists -U {{db_user}} -d {{db_name}} < backups/{{file}}
+    @echo "Restored from backups/{{file}}"
+
+# List available backups with sizes
+db-backup-list:
+    @ls -lh backups/
+
 # ---------- sourcing ----------
 
 # Run company sourcing pipeline (SEC EDGAR, Wikidata, ProPublica, CO/TX/NY/OR/IA SOS, FDIC, NCUA, SBA PPP, OSHA)

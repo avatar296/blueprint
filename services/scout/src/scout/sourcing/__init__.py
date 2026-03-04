@@ -7,7 +7,6 @@ from scout.sourcing.iowa_sos import IowaSosSource
 from scout.sourcing.ncua import NcuaSource
 from scout.sourcing.newyork_sos import NewYorkSosSource
 from scout.sourcing.oregon_sos import OregonSosSource
-from scout.sourcing.osha import OshaSource
 from scout.sourcing.propublica import ProPublicaSource
 from scout.sourcing.sba_ppp import SbaPppSource
 from scout.sourcing.sec_edgar import SecEdgarSource
@@ -23,7 +22,6 @@ __all__ = [
     "NcuaSource",
     "NewYorkSosSource",
     "OregonSosSource",
-    "OshaSource",
     "ProPublicaSource",
     "SbaPppSource",
     "SecEdgarSource",

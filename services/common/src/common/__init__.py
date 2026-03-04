@@ -14,6 +14,12 @@ from common.discovery import (
 )
 from common.jobs import fetch_jobs_by_status, insert_job, transition_status
 from common.models import JobInsert, JobRow, JobStatus
+from common.sourcing_runs import (
+    complete_run,
+    create_run,
+    fail_run,
+    insert_provider_result,
+)
 
 __all__ = [
     "get_pool",
@@ -33,4 +39,9 @@ __all__ = [
     "get_unprobed_sourced_companies",
     "mark_probed",
     "get_company_count",
+    # sourcing runs
+    "create_run",
+    "complete_run",
+    "fail_run",
+    "insert_provider_result",
 ]
