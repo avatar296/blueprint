@@ -81,6 +81,34 @@ sourcing-by-source:
         count(naics_code) AS has_naics \
     FROM companies GROUP BY source ORDER BY total DESC"
 
+# ---------- verification ----------
+
+# Run company verification (website liveness, DDG search, SEC filings)
+# Usage: just verify [BATCH_SIZE]  (default: 500)
+verify batch="500":
+    DATABASE_URL="{{db_url}}" VERIFIER_BATCH_SIZE={{batch}} uv run python -c "\
+    import logging; \
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s'); \
+    from verifier.config import load_config; \
+    from verifier.runner import run_verification; \
+    cfg = load_config(); \
+    cfg.batch_size = {{batch}}; \
+    run_verification( \
+        batch_size=cfg.batch_size, reverify_days=cfg.reverify_days, \
+        website_concurrency=cfg.website_concurrency, ddg_limit=cfg.ddg_daily_limit, \
+        sec_concurrency=cfg.sec_concurrency, discovery_concurrency=cfg.discovery_concurrency, \
+        ollama_base_url=cfg.ollama_base_url, ollama_model=cfg.ollama_model, \
+        ollama_timeout=cfg.ollama_timeout, ollama_vision_model=cfg.ollama_vision_model, \
+        ollama_vision_timeout=cfg.ollama_vision_timeout, \
+    )"
+
+# Verification stats
+verify-stats:
+    just db-query "SELECT check_type, count(*) AS total, \
+        count(*) FILTER (WHERE result->>'website_reachable' = 'true') AS reachable, \
+        count(*) FILTER (WHERE result->>'yelp_closed' = 'true') AS closed \
+    FROM company_signals GROUP BY check_type ORDER BY check_type"
+
 # ---------- dev tools ----------
 
 # Lint all Python services

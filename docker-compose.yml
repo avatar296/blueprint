@@ -50,21 +50,22 @@ services:
     networks:
       - blueprint-net
 
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ollama_models:/root/.ollama
-  #   # Uncomment for NVIDIA GPU passthrough:
-  #   # deploy:
-  #   #   resources:
-  #   #     reservations:
-  #   #       devices:
-  #   #         - driver: nvidia
-  #   #           count: all
-  #   #           capabilities: [gpu]
-  #   networks:
-  #     - blueprint-net
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - blueprint-net
 
   # scout:
   #   build:
@@ -88,6 +89,30 @@ services:
   #     SCOUT_FILTER_INDUSTRIES: ${SCOUT_FILTER_INDUSTRIES:-}
   #   volumes:
   #     - ./data:/app/data:ro
+  #   networks:
+  #     - blueprint-net
+
+  # verifier:
+  #   build:
+  #     context: ./services
+  #     dockerfile: verifier/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: postgres://${POSTGRES_USER:-blueprint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-blueprint}
+  #     VERIFIER_BATCH_SIZE: ${VERIFIER_BATCH_SIZE:-500}
+  #     VERIFIER_WEBSITE_CONCURRENCY: ${VERIFIER_WEBSITE_CONCURRENCY:-50}
+  #     VERIFIER_DDG_DAILY_LIMIT: ${VERIFIER_DDG_DAILY_LIMIT:-1000}
+  #     VERIFIER_DISCOVERY_CONCURRENCY: ${VERIFIER_DISCOVERY_CONCURRENCY:-5}
+  #     OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+  #     VERIFIER_LLM_MODEL: ${VERIFIER_LLM_MODEL:-llama3}
+  #     VERIFIER_LLM_TIMEOUT: ${VERIFIER_LLM_TIMEOUT:-10}
+  #     VERIFIER_VISION_MODEL: ${VERIFIER_VISION_MODEL:-}
+  #     VERIFIER_VISION_TIMEOUT: ${VERIFIER_VISION_TIMEOUT:-15}
+  #     VERIFIER_REVERIFY_DAYS: ${VERIFIER_REVERIFY_DAYS:-30}
+  #     VERIFIER_IDLE_SLEEP_SECONDS: ${VERIFIER_IDLE_SLEEP_SECONDS:-30}
   #   networks:
   #     - blueprint-net
 

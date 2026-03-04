@@ -14,6 +14,13 @@ from common.discovery import (
 )
 from common.jobs import fetch_jobs_by_status, insert_job, transition_status
 from common.models import JobInsert, JobRow, JobStatus
+from common.signals import (
+    get_companies_to_verify,
+    insert_signal,
+    insert_signals_batch,
+    mark_verified,
+    mark_verified_batch,
+)
 from common.sourcing_runs import (
     complete_run,
     create_run,
@@ -39,6 +46,12 @@ __all__ = [
     "get_unprobed_sourced_companies",
     "mark_probed",
     "get_company_count",
+    # signals
+    "get_companies_to_verify",
+    "insert_signal",
+    "insert_signals_batch",
+    "mark_verified",
+    "mark_verified_batch",
     # sourcing runs
     "create_run",
     "complete_run",
