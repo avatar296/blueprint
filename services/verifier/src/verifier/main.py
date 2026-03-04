@@ -15,6 +15,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
+# Silence noisy HTTP/search libraries
+logging.getLogger("ddgs").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("primp").setLevel(logging.WARNING)
 log = logging.getLogger("verifier")
 
 _shutdown = False

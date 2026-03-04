@@ -86,9 +86,12 @@ sourcing-by-source:
 # Run company verification (website liveness, DDG search, SEC filings)
 # Usage: just verify [BATCH_SIZE]  (default: 500)
 verify batch="500":
-    DATABASE_URL="{{db_url}}" VERIFIER_BATCH_SIZE={{batch}} uv run python -c "\
+    DATABASE_URL="{{db_url}}" VERIFIER_BATCH_SIZE={{batch}} OLLAMA_BASE_URL="http://localhost:11434" uv run python -c "\
     import logging; \
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s'); \
+    logging.getLogger('ddgs').setLevel(logging.WARNING); \
+    logging.getLogger('httpx').setLevel(logging.WARNING); \
+    logging.getLogger('primp').setLevel(logging.WARNING); \
     from verifier.config import load_config; \
     from verifier.runner import run_verification; \
     cfg = load_config(); \
@@ -101,6 +104,11 @@ verify batch="500":
         ollama_timeout=cfg.ollama_timeout, ollama_vision_model=cfg.ollama_vision_model, \
         ollama_vision_timeout=cfg.ollama_vision_timeout, \
     )"
+
+# Run verifier in continuous loop (processes batches until Ctrl-C)
+# Usage: just verify-loop [BATCH_SIZE]  (default: 500)
+verify-loop batch="500":
+    DATABASE_URL="{{db_url}}" VERIFIER_BATCH_SIZE={{batch}} OLLAMA_BASE_URL="http://localhost:11434" uv run python -m verifier.main
 
 # Verification stats
 verify-stats:

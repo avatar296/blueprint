@@ -19,6 +19,13 @@ _CLOSED_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LEGAL_SUFFIXES_RE = re.compile(
+    r",?\s*\b(Inc\.?|Corp\.?|Corporation|LLC\.?|L\.?L\.?C\.?"
+    r"|Ltd\.?|L\.?P\.?|Co\.?|Company|P\.?C\.?|P\.?L\.?L\.?C\.?"
+    r"|LLP|L\.?L\.?P\.?|D/?B/?A|Incorporated)\b\.?",
+    re.IGNORECASE,
+)
+
 
 async def _rate_limit():
     """Enforce minimum interval between DDG API calls."""
@@ -31,9 +38,17 @@ async def _rate_limit():
         _last_call_time = time.monotonic()
 
 
+def _clean_name(name: str) -> str:
+    """Strip legal suffixes and clean up a company name for search."""
+    cleaned = _LEGAL_SUFFIXES_RE.sub("", name).strip(" ,.-")
+    # Collapse extra whitespace
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned or name
+
+
 def _build_query(name: str, city: str | None, state: str | None) -> str:
     """Build a location-qualified search query."""
-    parts = [name]
+    parts = [_clean_name(name)]
     if city:
         parts.append(city)
     if state:

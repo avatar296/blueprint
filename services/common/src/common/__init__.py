@@ -18,8 +18,6 @@ from common.signals import (
     get_companies_to_verify,
     insert_signal,
     insert_signals_batch,
-    mark_verified,
-    mark_verified_batch,
 )
 from common.sourcing_runs import (
     complete_run,
@@ -50,8 +48,6 @@ __all__ = [
     "get_companies_to_verify",
     "insert_signal",
     "insert_signals_batch",
-    "mark_verified",
-    "mark_verified_batch",
     # sourcing runs
     "create_run",
     "complete_run",

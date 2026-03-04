@@ -20,6 +20,8 @@ services:
       - random_page_cost=1.1
       - -c
       - huge_pages=try
+      - -c
+      - max_wal_size=4GB
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:

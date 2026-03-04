@@ -21,17 +21,20 @@ import re
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from camoufox.async_api import AsyncCamoufox
-from playwright.async_api import Page, Error as PlaywrightError
+from playwright.async_api import Page, Error as PlaywrightError, async_playwright
+from playwright_stealth import Stealth
 
 log = logging.getLogger("verifier.checks.discovery")
 
 # ── ATS platform signatures ─────────────────────────────────────
 _ATS_PATTERNS: list[tuple[str, re.Pattern, str]] = [
     ("greenhouse", re.compile(r"boards\.greenhouse\.io/", re.IGNORECASE), "greenhouse.io"),
+    ("greenhouse", re.compile(r"job-boards\.greenhouse\.io/", re.IGNORECASE), "greenhouse.io"),
     ("lever", re.compile(r"jobs\.lever\.co/", re.IGNORECASE), "lever.co"),
     ("workday", re.compile(r"\.wd\d+\.myworkdayjobs\.com", re.IGNORECASE), "myworkdayjobs.com"),
+    ("workday", re.compile(r"myworkdayjobs\.com", re.IGNORECASE), "myworkdayjobs.com"),
     ("icims", re.compile(r"careers-.*\.icims\.com", re.IGNORECASE), "icims.com"),
+    ("icims", re.compile(r"\.icims\.com/jobs", re.IGNORECASE), "icims.com"),
     ("taleo", re.compile(r"\.taleo\.net", re.IGNORECASE), "taleo.net"),
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/", re.IGNORECASE), "ashbyhq.com"),
     ("smartrecruiters", re.compile(r"jobs\.smartrecruiters\.com/", re.IGNORECASE), "smartrecruiters.com"),
@@ -40,16 +43,53 @@ _ATS_PATTERNS: list[tuple[str, re.Pattern, str]] = [
     ("jobvite", re.compile(r"jobs\.jobvite\.com", re.IGNORECASE), "jobvite.com"),
     ("adp", re.compile(r"workforcenow\.adp\.com", re.IGNORECASE), "adp.com"),
     ("ultipro", re.compile(r"recruiting\.ultipro\.com", re.IGNORECASE), "ultipro.com"),
+    # SAP SuccessFactors
+    ("successfactors", re.compile(r"\.successfactors\.com", re.IGNORECASE), "successfactors.com"),
+    ("successfactors", re.compile(r"jobs\.sap\.com", re.IGNORECASE), "sap.com"),
+    ("successfactors", re.compile(r"performancemanager\d*\.successfactors\.com", re.IGNORECASE), "successfactors.com"),
+    # Eightfold
+    ("eightfold", re.compile(r"\.eightfold\.ai", re.IGNORECASE), "eightfold.ai"),
+    # Phenom
+    ("phenom", re.compile(r"\.phenom\.com", re.IGNORECASE), "phenom.com"),
+    ("phenom", re.compile(r"jobs\..*\.com/.*phenom", re.IGNORECASE), "phenom.com"),
+    # Avature
+    ("avature", re.compile(r"\.avature\.net", re.IGNORECASE), "avature.net"),
+    # Brassring / Kenexa (IBM)
+    ("brassring", re.compile(r"\.brassring\.com", re.IGNORECASE), "brassring.com"),
+    # Cornerstone OnDemand
+    ("cornerstone", re.compile(r"\.csod\.com", re.IGNORECASE), "csod.com"),
+    # Ceridian / Dayforce
+    ("dayforce", re.compile(r"\.dayforcehcm\.com", re.IGNORECASE), "dayforcehcm.com"),
+    ("dayforce", re.compile(r"\.dayforce\.com", re.IGNORECASE), "dayforce.com"),
+    # Rippling
+    ("rippling", re.compile(r"ats\.rippling\.com", re.IGNORECASE), "rippling.com"),
+    # JazzHR
+    ("jazzhr", re.compile(r"\.applytojob\.com", re.IGNORECASE), "applytojob.com"),
+    # Recruitee
+    ("recruitee", re.compile(r"\.recruitee\.com", re.IGNORECASE), "recruitee.com"),
+    # Personio
+    ("personio", re.compile(r"\.jobs\.personio\.com", re.IGNORECASE), "personio.com"),
 ]
 
 _ATS_CONTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("greenhouse", re.compile(r"powered\s+by\s+greenhouse", re.IGNORECASE)),
+    ("greenhouse", re.compile(r"id=['\"]grnhse_app['\"]", re.IGNORECASE)),
+    ("greenhouse", re.compile(r"greenhouse\.io/embed/job_board", re.IGNORECASE)),
     ("lever", re.compile(r"powered\s+by\s+lever", re.IGNORECASE)),
+    ("lever", re.compile(r"lever-jobs-container", re.IGNORECASE)),
     ("workday", re.compile(r"powered\s+by\s+workday", re.IGNORECASE)),
+    ("workday", re.compile(r"myworkdayjobs\.com", re.IGNORECASE)),
     ("icims", re.compile(r"powered\s+by\s+icims", re.IGNORECASE)),
+    ("icims", re.compile(r"icims\.com/jobs", re.IGNORECASE)),
     ("bamboohr", re.compile(r"powered\s+by\s+bamboohr", re.IGNORECASE)),
     ("jobvite", re.compile(r"powered\s+by\s+jobvite", re.IGNORECASE)),
     ("smartrecruiters", re.compile(r"powered\s+by\s+smartrecruiters", re.IGNORECASE)),
+    ("successfactors", re.compile(r"powered\s+by\s+sap\s+successfactors", re.IGNORECASE)),
+    ("successfactors", re.compile(r"successfactors\.com", re.IGNORECASE)),
+    ("eightfold", re.compile(r"eightfold\.ai", re.IGNORECASE)),
+    ("phenom", re.compile(r"powered\s+by\s+phenom", re.IGNORECASE)),
+    ("phenom", re.compile(r"phenom\.com", re.IGNORECASE)),
+    ("avature", re.compile(r"avature\.net", re.IGNORECASE)),
 ]
 
 # ── Email extraction ─────────────────────────────────────────────
@@ -100,6 +140,35 @@ _EXCLUDED_TEXT_RE = re.compile(
     r"employee\s*login|client\s*login|patient\s*portal)$",
     re.IGNORECASE,
 )
+
+# Known ATS domains — cross-domain links to these are acceptable
+_ATS_DOMAINS = {d for _, _, d in _ATS_PATTERNS}
+
+# Negative signals that disqualify a link from being a careers page
+_CAREERS_NEGATIVE_RE = re.compile(
+    r"store.locator|find.a.store|shop.now|promo|save.now|coupon|deal"
+    r"|log.?in|sign.?in|my.?account|patient.portal"
+    r"|who.we.are|investor.relations|annual.report"
+    r"|store.finder|locate.a.store",
+    re.IGNORECASE,
+)
+
+
+def _root_domain(url: str) -> str:
+    """Extract registrable domain: 'https://www.jobs.target.com/page' → 'target.com'."""
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        return ""
+    if host.startswith("www."):
+        host = host[4:]
+    parts = host.split(".")
+    # Handle co.uk, com.au style TLDs
+    if len(parts) >= 3 and parts[-2] in ("co", "com", "org", "net", "gov"):
+        return ".".join(parts[-3:])
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return host
 
 # ── JS snippet to extract navigable elements from the DOM ────────
 _EXTRACT_ELEMENTS_JS = """
@@ -293,16 +362,39 @@ def _visibility_modifier(el: dict) -> float:
     return 1.0 if el.get("visible") else 0.3
 
 
-def _score_for_careers(el: dict) -> float:
-    """Score an element for careers/jobs relevance (0.0 – 1.0)."""
+def _score_for_careers(el: dict, *, base_domain: str = "") -> float:
+    """Score an element for careers/jobs relevance (0.0 – 1.0).
+
+    *base_domain*: registrable domain of the company homepage.  If provided,
+    links pointing to a different domain (unless it's a known ATS) score 0.
+    """
     if _is_excluded(el):
         return 0.0
 
-    score = 0.0
     text = el.get("text", "").strip().lower()
     href = el.get("href", "").lower()
     aria = el.get("aria", "").strip().lower()
     title_attr = el.get("title", "").strip().lower()
+
+    # ── Negative keyword exclusion ────────────────────────────
+    # Text or href path matching store-locator / promo / login / etc. → reject
+    if _CAREERS_NEGATIVE_RE.search(text):
+        return 0.0
+    if href:
+        href_path = urlparse(href).path
+        if _CAREERS_NEGATIVE_RE.search(href_path):
+            return 0.0
+
+    # ── Cross-domain penalty ──────────────────────────────────
+    # If the link points off-site and isn't a known ATS, reject it.
+    if base_domain and href:
+        link_domain = _root_domain(href)
+        if link_domain and link_domain != base_domain:
+            # Allow known ATS domains
+            if not any(ats in link_domain for ats in _ATS_DOMAINS):
+                return 0.0
+
+    score = 0.0
 
     # Tier 4: ATS domain in href (very strong signal)
     for _, url_re, _ in _ATS_PATTERNS:
@@ -503,6 +595,42 @@ def _build_llm_prompt(candidates: list[dict], goal: str) -> str:
         lines.append(line)
 
     return "\n".join(lines)
+
+
+_LLM_CAREERS_SANITY_RE = re.compile(
+    r"career|careers|jobs?|hiring|openings|positions|vacancies|applicant"
+    r"|work.with.us|join.our.team|join.the.team|we.re.hiring|talent"
+    r"|employment|recruit|human.resources",
+    re.IGNORECASE,
+)
+
+
+def _validate_llm_pick(el: dict, goal: str) -> bool:
+    """Sanity-check an LLM-picked element.
+
+    Returns True if the element has at least some relevance to the goal.
+    This catches cases where the vision model picks random UI elements.
+    """
+    if goal != "careers":
+        return True  # only gating careers picks for now
+
+    text = el.get("text", "").strip().lower()
+    href = el.get("href", "").lower()
+    aria = el.get("aria", "").strip().lower()
+
+    for signal in (text, href, aria):
+        if _LLM_CAREERS_SANITY_RE.search(signal):
+            return True
+
+    # Also check href path
+    try:
+        path = urlparse(href).path.lower()
+        if any(kw in path for kw in ("/career", "/jobs", "/hiring", "/openings", "/talent")):
+            return True
+    except Exception:
+        pass
+
+    return False
 
 
 def _parse_llm_response(data: dict, candidates: list[dict]) -> dict | None:
@@ -715,7 +843,19 @@ async def _vision_pick_element(
 
 # ── ATS detection on a careers page ──────────────────────────────
 
-async def _navigate_and_detect_ats(page: Page, careers_url: str) -> dict:
+_LOGIN_SIGNAL_RE = re.compile(
+    r"(log\s*in|sign\s*in|forgot.password|reset.password|username.and.password)",
+    re.IGNORECASE,
+)
+_CAREERS_PAGE_RE = re.compile(
+    r"(careers|jobs|open.positions|openings|hiring|join.our.team|work.with.us)",
+    re.IGNORECASE,
+)
+
+
+async def _navigate_and_detect_ats(
+    page: Page, careers_url: str, *, base_domain: str = ""
+) -> dict:
     """Navigate to a careers URL and detect ATS platform via 4 layers."""
     result = {"careers_url": careers_url, "ats_platform": None, "ats_url": None}
 
@@ -731,6 +871,31 @@ async def _navigate_and_detect_ats(page: Page, careers_url: str) -> dict:
 
     final_url = page.url
     result["careers_url"] = final_url
+
+    # ── Post-navigation validation ────────────────────────────
+    # If the final URL is off-domain (after redirects) and not a known ATS, discard.
+    if base_domain:
+        final_domain = _root_domain(final_url)
+        if final_domain and final_domain != base_domain:
+            if not any(ats in final_domain for ats in _ATS_DOMAINS):
+                log.debug(
+                    "Careers link redirected off-domain: %s → %s — discarding",
+                    base_domain, final_domain,
+                )
+                result["careers_url"] = None
+                return result
+
+    # Check for login pages masquerading as careers
+    try:
+        snippet = await page.inner_text("body", timeout=3000)
+        snippet = snippet[:5000]
+    except PlaywrightError:
+        snippet = ""
+
+    if _LOGIN_SIGNAL_RE.search(snippet) and not _CAREERS_PAGE_RE.search(snippet):
+        log.debug("Careers link landed on login page: %s — discarding", final_url)
+        result["careers_url"] = None
+        return result
 
     # Layer 1: Final URL domain after redirects
     platform, ats_url = _detect_ats_in_url(final_url)
@@ -754,16 +919,41 @@ async def _navigate_and_detect_ats(page: Page, careers_url: str) -> dict:
             result["ats_platform"] = platform_name
             return result
 
-    # Layer 4: iframe src attributes
+    # Layer 4: iframe src attributes (including dynamically injected)
     try:
         iframe_srcs = await page.eval_on_selector_all(
-            "iframe[src]", "els => els.map(e => e.getAttribute('src'))"
+            "iframe[src]", "els => els.map(e => e.src || e.getAttribute('src'))"
         )
         for src in (iframe_srcs or []):
             platform, ats_url = _detect_ats_in_url(src)
             if platform:
                 result["ats_platform"] = platform
                 result["ats_url"] = ats_url
+                return result
+    except PlaywrightError:
+        pass
+
+    # Layer 5: script src attributes (Greenhouse embed, Lever widget, Phenom SDK, etc.)
+    try:
+        script_srcs = await page.eval_on_selector_all(
+            "script[src]", "els => els.map(e => e.src || e.getAttribute('src'))"
+        )
+        for src in (script_srcs or []):
+            platform, ats_url = _detect_ats_in_url(src)
+            if platform:
+                result["ats_platform"] = platform
+                result["ats_url"] = ats_url
+                return result
+    except PlaywrightError:
+        pass
+
+    # Layer 6: full page HTML (catches data attributes, inline config, hidden markers)
+    try:
+        html = await page.content()
+        html_snippet = html[:50_000]
+        for platform_name, pattern in _ATS_CONTENT_PATTERNS:
+            if pattern.search(html_snippet):
+                result["ats_platform"] = platform_name
                 return result
     except PlaywrightError:
         pass
@@ -897,7 +1087,10 @@ async def _discover_one(
     data = await _extract_page_data(page)
 
     # ── Step 2: Score elements for careers + contact ─────────
-    best_careers_el = _best_element(elements, _score_for_careers)
+    base_domain = _root_domain(base_url)
+    best_careers_el = _best_element(
+        elements, lambda el: _score_for_careers(el, base_domain=base_domain)
+    )
     best_contact_el = _best_element(elements, _score_for_contact)
 
     # ── Step 2b: LLM fallback when scorer found nothing ──────
@@ -909,9 +1102,13 @@ async def _discover_one(
             timeout=ollama_timeout,
         )
         if llm_el:
-            best_careers_el = llm_el
-            log.info("LLM picked careers element: text=%r href=%r",
-                     llm_el.get("text", ""), llm_el.get("href", ""))
+            if _validate_llm_pick(llm_el, "careers"):
+                best_careers_el = llm_el
+                log.info("LLM picked careers element: text=%r href=%r",
+                         llm_el.get("text", ""), llm_el.get("href", ""))
+            else:
+                log.debug("LLM pick rejected (no careers signal): text=%r href=%r",
+                          llm_el.get("text", ""), llm_el.get("href", ""))
 
     if not best_contact_el and ollama_base_url and elements:
         llm_el = await _llm_pick_element(
@@ -934,9 +1131,13 @@ async def _discover_one(
             timeout=ollama_vision_timeout,
         )
         if vision_el:
-            best_careers_el = vision_el
-            log.info("Vision LLM picked careers element: text=%r href=%r",
-                     vision_el.get("text", ""), vision_el.get("href", ""))
+            if _validate_llm_pick(vision_el, "careers"):
+                best_careers_el = vision_el
+                log.info("Vision LLM picked careers element: text=%r href=%r",
+                         vision_el.get("text", ""), vision_el.get("href", ""))
+            else:
+                log.debug("Vision LLM pick rejected (no careers signal): text=%r href=%r",
+                          vision_el.get("text", ""), vision_el.get("href", ""))
 
     if not best_contact_el and ollama_base_url and ollama_vision_model and elements:
         vision_el = await _vision_pick_element(
@@ -996,30 +1197,78 @@ async def _discover_one(
         careers_href = _resolve_href(best_careers_el.get("href", ""), base_url)
 
     if careers_href:
-        ats_result = await _navigate_and_detect_ats(page, careers_href)
+        ats_result = await _navigate_and_detect_ats(
+            page, careers_href, base_domain=base_domain
+        )
         careers["careers_url"] = ats_result["careers_url"]
         if ats_result["ats_platform"]:
             careers["ats_platform"] = ats_result["ats_platform"]
             careers["ats_url"] = ats_result["ats_url"]
     elif not careers["ats_platform"]:
-        # Fallback: probe /careers, /jobs
-        for probe_path in ("/careers", "/jobs"):
-            probe_url = urljoin(base_url, probe_path)
+        # Fallback: probe path and subdomain patterns
+        # 1) Path probes on same domain
+        probe_urls = [urljoin(base_url, p) for p in ("/careers", "/jobs")]
+
+        # 2) Subdomain probes: careers.{domain}, jobs.{domain}
+        if base_domain:
+            for sub in ("careers", "jobs"):
+                probe_urls.append(f"https://{sub}.{base_domain}/")
+
+        for probe_url in probe_urls:
             try:
                 probe_resp = await page.goto(
                     probe_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT
                 )
-                if probe_resp and probe_resp.status < 400:
-                    ats_result = {"careers_url": page.url, "ats_platform": None, "ats_url": None}
-                    p, a = _detect_ats_in_url(page.url)
-                    if p:
-                        ats_result["ats_platform"] = p
-                        ats_result["ats_url"] = a
-                    careers["careers_url"] = ats_result["careers_url"]
-                    if ats_result["ats_platform"]:
-                        careers["ats_platform"] = ats_result["ats_platform"]
-                        careers["ats_url"] = ats_result["ats_url"]
-                    break
+                if not probe_resp or probe_resp.status >= 400:
+                    continue
+
+                final_probe_url = page.url
+
+                # Validate: reject if redirected off-domain (not ATS)
+                if base_domain:
+                    probe_domain = _root_domain(final_probe_url)
+                    if probe_domain and probe_domain != base_domain:
+                        if not any(ats in probe_domain for ats in _ATS_DOMAINS):
+                            log.debug("Probe %s redirected off-domain → %s", probe_url, probe_domain)
+                            continue
+
+                # Validate: check page content for careers signals
+                try:
+                    probe_title = await page.title()
+                    probe_snippet = await page.inner_text("body", timeout=3000)
+                    probe_snippet = probe_snippet[:5000]
+                except PlaywrightError:
+                    probe_title = ""
+                    probe_snippet = ""
+
+                probe_text = f"{probe_title} {probe_snippet}"
+
+                # Reject login pages without careers signals
+                if _LOGIN_SIGNAL_RE.search(probe_text) and not _CAREERS_PAGE_RE.search(probe_text):
+                    log.debug("Probe %s landed on login page — skipping", probe_url)
+                    continue
+
+                # Reject if no careers signal at all in title+body
+                if not _CAREERS_PAGE_RE.search(probe_text):
+                    if _CAREERS_NEGATIVE_RE.search(probe_text):
+                        log.debug("Probe %s matched negative pattern — skipping", probe_url)
+                        continue
+
+                ats_result = {"careers_url": final_probe_url, "ats_platform": None, "ats_url": None}
+                p, a = _detect_ats_in_url(final_probe_url)
+                if p:
+                    ats_result["ats_platform"] = p
+                    ats_result["ats_url"] = a
+                else:
+                    # Check page content/hrefs for ATS on the probed page
+                    ats_result.update(await _navigate_and_detect_ats(
+                        page, final_probe_url, base_domain=base_domain
+                    ))
+                careers["careers_url"] = ats_result["careers_url"] or final_probe_url
+                if ats_result["ats_platform"]:
+                    careers["ats_platform"] = ats_result["ats_platform"]
+                    careers["ats_url"] = ats_result["ats_url"]
+                break
             except PlaywrightError:
                 continue
 
@@ -1089,16 +1338,22 @@ async def _discover_one(
     return {"careers": careers, "contact": contact}
 
 
+_stealth = Stealth()
+
+
 async def discover_one_url(url: str) -> dict:
     """Convenience: discover careers+contact for a single URL (launches its own browser)."""
-    async with AsyncCamoufox(headless=True) as browser:
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(ignore_https_errors=True)
+        await _stealth.apply_stealth_async(context)
         page = await context.new_page()
         try:
             return await _discover_one(page, url)
         finally:
             await page.close()
             await context.close()
+            await browser.close()
 
 
 async def discover_batch(
@@ -1111,6 +1366,7 @@ async def discover_batch(
     ollama_timeout: float = 10.0,
     ollama_vision_model: str | None = None,
     ollama_vision_timeout: float = 15.0,
+    on_result=None,
 ) -> dict:
     """Discover careers + contact for a batch of companies using Playwright.
 
@@ -1133,31 +1389,44 @@ async def discover_batch(
     results: dict = {}
     wr = website_results or {}
 
-    async with AsyncCamoufox(headless=True) as browser:
+    # Count eligible companies for progress tracking
+    eligible = []
+    for c in companies:
+        cid = c["id"]
+        ws = wr.get(cid, {})
+        is_reachable = ws.get("website_reachable", False)
+        is_parked = ws.get("website_is_parked", False)
+        if wr and not is_reachable and not is_parked:
+            continue
+        if not c.get("website") and not is_parked:
+            continue
+        eligible.append(c)
+    skipped = len(companies) - len(eligible)
+    if skipped:
+        log.info("Discovery: %d eligible, %d skipped (unreachable/no URL)", len(eligible), skipped)
+
+    done_count = 0
+    total = len(eligible)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(ignore_https_errors=True)
+        await _stealth.apply_stealth_async(context)
 
         async def _run(company: dict):
+            nonlocal done_count
             cid = company["id"]
             url = company.get("website")
             name = company.get("name")
             city = company.get("city")
             state = company.get("state")
 
-            # Determine routing from website_results
             ws = wr.get(cid, {})
-            is_reachable = ws.get("website_reachable", False)
             is_parked = ws.get("website_is_parked", False)
-
-            # Skip if we have website_results and site is neither reachable nor parked
-            if wr and not is_reachable and not is_parked:
-                return
-
-            # Skip if no URL and not parked
-            if not url and not is_parked:
-                return
 
             async with sem:
                 page = await context.new_page()
+                t_start = asyncio.get_event_loop().time()
                 try:
                     result = await asyncio.wait_for(
                         _discover_one(
@@ -1176,23 +1445,45 @@ async def discover_batch(
                         timeout=_COMPANY_TIMEOUT,
                     )
                     results[cid] = result
+                    if on_result:
+                        on_result(cid, result)
+
+                    # Per-company result summary with timing
+                    elapsed = asyncio.get_event_loop().time() - t_start
+                    c = result.get("careers", {})
+                    ct = result.get("contact", {})
+                    parts = []
+                    if c.get("careers_url"):
+                        parts.append("careers")
+                    if c.get("ats_platform"):
+                        parts.append(f"ats={c['ats_platform']}")
+                    if ct.get("contact_email"):
+                        parts.append("email")
+                    if ct.get("contact_phone"):
+                        parts.append("phone")
+                    found = ", ".join(parts) if parts else "none"
+                    log.info("[%d/%d] %s — %s (%.1fs)", done_count + 1, total, name, found, elapsed)
+
                 except asyncio.TimeoutError:
                     log.warning(
-                        "Discovery timed out for %s (%s) after %ds",
-                        name, url, _COMPANY_TIMEOUT,
+                        "[%d/%d] %s — TIMEOUT after %ds (%s)",
+                        done_count + 1, total, name, _COMPANY_TIMEOUT, url,
                     )
                 except Exception:
-                    log.debug(
-                        "Discovery failed for %s (%s)", name, url,
+                    log.warning(
+                        "[%d/%d] %s — ERROR (%s)",
+                        done_count + 1, total, name, url,
                         exc_info=True,
                     )
                 finally:
+                    done_count += 1
                     await page.close()
 
-        tasks = [asyncio.create_task(_run(c)) for c in companies]
+        tasks = [asyncio.create_task(_run(c)) for c in eligible]
         await asyncio.gather(*tasks, return_exceptions=True)
 
         await context.close()
+        await browser.close()
 
     found_careers = sum(1 for r in results.values() if r["careers"].get("careers_url"))
     found_ats = sum(1 for r in results.values() if r["careers"].get("ats_platform"))
