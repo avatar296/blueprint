@@ -23,7 +23,6 @@ CREATE UNIQUE INDEX idx_companies_dedup ON companies (normalized_name);
 CREATE INDEX idx_companies_probed ON companies (probed_at NULLS FIRST);
 CREATE INDEX idx_companies_employee_count ON companies (employee_count) WHERE employee_count IS NOT NULL;
 CREATE INDEX idx_companies_state ON companies (state) WHERE state IS NOT NULL;
-CREATE INDEX idx_companies_normalized ON companies (normalized_name);
 
 CREATE TRIGGER trg_companies_updated_at
     BEFORE UPDATE ON companies

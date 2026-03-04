@@ -3,7 +3,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from common.companies import get_company_count, upsert_company
+from common.companies import get_company_count, upsert_companies_batch
 from scout.discovery import normalize_company_name
 from scout.sourcing.base import CompanyRecord, CompanySource
 from scout.sourcing.colorado_sos import ColoradoSosSource
@@ -41,30 +41,33 @@ def _get_enabled_providers() -> list[CompanySource]:
     return providers
 
 
-def _upsert_record(record: CompanyRecord) -> None:
-    """Normalize and upsert a single CompanyRecord into the companies table."""
+def _prepare_record(record: CompanyRecord) -> tuple | None:
+    """Normalize a CompanyRecord into a parameter tuple for batch upsert.
+
+    Returns None if the name normalizes to empty.
+    """
     normalized = normalize_company_name(record.name)
     if not normalized:
-        return
+        return None
 
-    upsert_company(
-        name=record.name,
-        normalized_name=normalized,
-        source=record.source,
-        source_id=record.source_id,
-        employee_count=record.employee_count,
-        date_founded=record.date_founded,
-        state=record.state,
-        city=record.city,
-        industry=record.industry,
-        sic_code=record.sic_code,
-        website=record.website,
-        ticker=record.ticker,
-        exchange=record.exchange,
-        filer_category=record.filer_category,
-        total_assets=record.total_assets,
-        naics_code=record.naics_code,
-        description=record.description,
+    return (
+        record.name,
+        normalized,
+        record.source,
+        record.source_id,
+        record.employee_count,
+        record.date_founded,
+        record.state,
+        record.city,
+        record.industry,
+        record.sic_code,
+        record.website,
+        record.ticker,
+        record.exchange,
+        record.filer_category,
+        record.total_assets,
+        record.naics_code,
+        record.description,
     )
 
 
@@ -80,7 +83,7 @@ def run_sourcing(source_batch_limit: int = 0) -> int:
     log.info("Running %d sourcing providers (batch_limit=%s)", len(providers), source_batch_limit or "unlimited")
 
     count_before = get_company_count()
-    total_fetched = 0
+    total_upserted = 0
 
     def _fetch_provider(provider: CompanySource) -> tuple[str, list[CompanyRecord]]:
         log.info("--- Sourcing: %s ---", provider.name)
@@ -88,34 +91,24 @@ def run_sourcing(source_batch_limit: int = 0) -> int:
         log.info("%s: fetched %d records", provider.name, len(records))
         return provider.name, records
 
-    all_records: list[CompanyRecord] = []
     with ThreadPoolExecutor(max_workers=len(providers)) as executor:
         futures = {executor.submit(_fetch_provider, p): p for p in providers}
         for future in as_completed(futures):
             provider = futures[future]
             try:
-                _name, records = future.result()
-                total_fetched += len(records)
-                all_records.extend(records)
+                name, records = future.result()
+                rows = [t for r in records if (t := _prepare_record(r)) is not None]
+                upserted = upsert_companies_batch(rows)
+                total_upserted += upserted
+                log.info("%s: upserted %d rows", name, upserted)
             except Exception:
                 log.error("Provider %s failed", provider.name, exc_info=True)
-
-    # Sequential upsert after all fetches complete
-    for record in all_records:
-        try:
-            _upsert_record(record)
-        except Exception:
-            log.debug(
-                "Failed to upsert %s from %s",
-                record.name, record.source,
-                exc_info=True,
-            )
 
     count_after = get_company_count()
     new_companies = count_after - count_before
 
     log.info(
-        "Sourcing complete: %d records fetched, %d new companies (total: %d)",
-        total_fetched, new_companies, count_after,
+        "Sourcing complete: %d records upserted, %d new companies (total: %d)",
+        total_upserted, new_companies, count_after,
     )
-    return total_fetched
+    return total_upserted

@@ -78,6 +78,61 @@ def upsert_company(
     return row[0]
 
 
+def upsert_companies_batch(rows: list[tuple], *, chunk_size: int = 5_000) -> int:
+    """Batch-upsert company rows using executemany in chunks.
+
+    Each element of *rows* is a 17-tuple matching the INSERT column order
+    (name, normalized_name, source, source_id, employee_count, date_founded,
+     state, city, industry, sic_code, website, ticker, exchange,
+     filer_category, total_assets, naics_code, description).
+
+    Returns the number of rows sent (not necessarily new — ON CONFLICT updates
+    are counted too).
+    """
+    if not rows:
+        return 0
+
+    sql = """
+        INSERT INTO companies (
+            name, normalized_name, source, source_id,
+            employee_count, date_founded, state, city,
+            industry, sic_code, website,
+            ticker, exchange, filer_category, total_assets, naics_code, description
+        ) VALUES (
+            %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s,
+            %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (normalized_name) DO UPDATE SET
+            name            = COALESCE(EXCLUDED.name, companies.name),
+            source          = COALESCE(companies.source, EXCLUDED.source),
+            source_id       = COALESCE(companies.source_id, EXCLUDED.source_id),
+            employee_count  = COALESCE(EXCLUDED.employee_count, companies.employee_count),
+            date_founded    = COALESCE(EXCLUDED.date_founded, companies.date_founded),
+            state           = COALESCE(EXCLUDED.state, companies.state),
+            city            = COALESCE(EXCLUDED.city, companies.city),
+            industry        = COALESCE(EXCLUDED.industry, companies.industry),
+            sic_code        = COALESCE(EXCLUDED.sic_code, companies.sic_code),
+            website         = COALESCE(EXCLUDED.website, companies.website),
+            ticker          = COALESCE(EXCLUDED.ticker, companies.ticker),
+            exchange        = COALESCE(EXCLUDED.exchange, companies.exchange),
+            filer_category  = COALESCE(EXCLUDED.filer_category, companies.filer_category),
+            total_assets    = COALESCE(EXCLUDED.total_assets, companies.total_assets),
+            naics_code      = COALESCE(EXCLUDED.naics_code, companies.naics_code),
+            description     = COALESCE(EXCLUDED.description, companies.description)
+    """
+    pool = get_pool()
+    total = 0
+    for start in range(0, len(rows), chunk_size):
+        chunk = rows[start : start + chunk_size]
+        with pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(sql, chunk)
+        total += len(chunk)
+    return total
+
+
 def get_unprobed_companies(
     limit: int = 50,
     min_employees: int | None = None,
@@ -123,8 +178,10 @@ def mark_probed(company_id: UUID) -> None:
 
 
 def get_company_count() -> int:
-    """Return total number of companies in table."""
+    """Return estimated number of companies (via pg_class for speed)."""
     pool = get_pool()
     with pool.connection() as conn:
-        row = conn.execute("SELECT count(*) FROM companies").fetchone()
-    return row[0]
+        row = conn.execute(
+            "SELECT reltuples::bigint FROM pg_class WHERE relname = 'companies'"
+        ).fetchone()
+    return row[0] if row and row[0] >= 0 else 0

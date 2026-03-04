@@ -6,6 +6,20 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-blueprint}
       POSTGRES_USER: ${POSTGRES_USER:-blueprint}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=11GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - huge_pages=try
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
