@@ -178,6 +178,8 @@ async def _run_all_phases(
         discovery_task, search_task,
     )
 
+    search_signals = len(web_results) + len(fb_results) + len(yelp_results) + len(maps_results)
+    inserted += search_signals
     log.info(
         "Phase 3 + search done in %.1fs: %d discovery, %d web, %d fb, %d yelp, %d maps",
         time.monotonic() - t0,
@@ -269,7 +271,7 @@ async def _search_pass(companies: list[dict], ddg_limit: int) -> tuple[dict, dic
                 log.debug("Maps search failed for %s", name, exc_info=True)
 
         done += 1
-        if done % 25 == 0 or done == ddg_count:
+        if done % 5 == 0 or done == ddg_count:
             log.info("Search progress: %d/%d companies", done, ddg_count)
 
     await asyncio.gather(*[

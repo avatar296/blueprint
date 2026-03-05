@@ -1,6 +1,7 @@
 """Company signals helpers — query, insert, and mark verified."""
 
 import logging
+from collections.abc import Callable
 from uuid import UUID
 
 from psycopg.rows import dict_row
@@ -11,48 +12,89 @@ from common.db import get_pool
 log = logging.getLogger("common.signals")
 
 
-def get_companies_to_verify(
-    limit: int = 500,
-    reverify_days: int = 30,
-    min_employees: int | None = None,
-    stale_ratio: float = 0.2,
-) -> list[dict]:
-    """Return a mix of never-verified and stale companies.
+_SOUTHERN_CO_CITIES = [
+    'pueblo', 'colorado springs', 'canon city', 'florence', 'fountain',
+    'monument', 'woodland park', 'manitou springs', 'pueblo west',
+    'penrose', 'trinidad', 'walsenburg', 'la junta', 'salida',
+    'rocky ford', 'buena vista',
+]
 
-    "Verified" is derived from company_signals: a company is verified if it
-    has at least one signal row.  Staleness is based on the most recent
-    signal's updated_at vs *reverify_days*.
+# Each tier: (name, WHERE clause, extra-params factory).
+# Clauses reference table alias ``c`` for companies.
+_FRESH_TIERS: list[tuple[str, str, Callable[[], list]]] = [
+    ("southern_co",
+     "c.state = 'CO' AND lower(c.city) = ANY(%s)",
+     lambda: [_SOUTHERN_CO_CITIES]),
+    ("colorado",
+     "c.state = 'CO' AND (c.city IS NULL OR lower(c.city) != ALL(%s))",
+     lambda: [_SOUTHERN_CO_CITIES]),
+    ("large_with_website",
+     "c.employee_count >= 100 AND c.website IS NOT NULL"
+     " AND (c.state IS NULL OR c.state <> 'CO')",
+     lambda: []),
+    ("large",
+     "c.employee_count >= 100 AND c.website IS NULL"
+     " AND (c.state IS NULL OR c.state <> 'CO')",
+     lambda: []),
+    ("public_companies",
+     "(c.ticker IS NOT NULL OR c.source = 'sec_edgar')"
+     " AND (c.employee_count IS NULL OR c.employee_count < 100)"
+     " AND (c.state IS NULL OR c.state <> 'CO')",
+     lambda: []),
+    ("medium_with_website",
+     "c.employee_count BETWEEN 50 AND 99 AND c.website IS NOT NULL"
+     " AND (c.state IS NULL OR c.state <> 'CO')",
+     lambda: []),
+    ("medium",
+     "c.employee_count BETWEEN 50 AND 99 AND c.website IS NULL"
+     " AND (c.state IS NULL OR c.state <> 'CO')",
+     lambda: []),
+    ("has_website",
+     "c.website IS NOT NULL"
+     " AND (c.employee_count IS NULL OR c.employee_count < 50)"
+     " AND (c.state IS NULL OR c.state <> 'CO')",
+     lambda: []),
+]
 
-    By default 80% of the batch is fresh (no signals) and 20% is stale.
-    If either pool is too small the other fills the remaining slots.
+_COLS = "c.id, c.name, c.normalized_name, c.city, c.state, c.website, c.source, c.ticker"
 
-    Returns list of dicts with id, name, city, state, website, source, ticker.
-    """
-    pool = get_pool()
-    stale_limit = max(1, int(limit * stale_ratio))
-    fresh_limit = limit - stale_limit
+# Skip companies whose name contains state-filing status markers (dead/defunct).
+_DEAD_FILTER = "AND c.name NOT ILIKE '%%delinquent%%' AND c.name NOT ILIKE '%%dissolved%%'"
 
-    emp_filter = ""
-    emp_params: list = []
-    if min_employees is not None:
-        emp_filter = " AND c.employee_count >= %s"
-        emp_params = [min_employees]
 
-    query = f"""
-        (
-            SELECT c.id, c.name, c.normalized_name, c.city, c.state,
-                   c.website, c.source, c.ticker
+def _fetch_fresh_tiered(conn, remaining: int) -> list[dict]:
+    """Fill *remaining* slots from highest-priority tier first."""
+    rows: list[dict] = []
+    for tier_name, where, params_fn in _FRESH_TIERS:
+        if remaining <= 0:
+            break
+        query = f"""
+            SELECT {_COLS}
             FROM companies c
             WHERE NOT EXISTS (
                 SELECT 1 FROM company_signals cs WHERE cs.company_id = c.id
-            ){emp_filter}
+            ) AND {where}
+            {_DEAD_FILTER}
             ORDER BY c.employee_count DESC NULLS LAST
             LIMIT %s
-        )
-        UNION ALL
-        (
-            SELECT c.id, c.name, c.normalized_name, c.city, c.state,
-                   c.website, c.source, c.ticker
+        """
+        params = [*params_fn(), remaining]
+        batch = conn.execute(query, params).fetchall()
+        if batch:
+            log.info("tier %-22s  → %d companies", tier_name, len(batch))
+            rows.extend(batch)
+            remaining -= len(batch)
+    return rows
+
+
+def _fetch_stale_tiered(conn, remaining: int, reverify_days: int) -> list[dict]:
+    """Re-verify stale companies in tier order."""
+    rows: list[dict] = []
+    for tier_name, where, params_fn in _FRESH_TIERS:
+        if remaining <= 0:
+            break
+        query = f"""
+            SELECT {_COLS}
             FROM companies c
             JOIN (
                 SELECT company_id, max(updated_at) AS last_checked
@@ -60,18 +102,69 @@ def get_companies_to_verify(
                 GROUP BY company_id
                 HAVING max(updated_at) < now() - make_interval(days => %s)
             ) s ON s.company_id = c.id
-            {emp_filter}
+            WHERE {where}
+            {_DEAD_FILTER}
             ORDER BY s.last_checked, c.employee_count DESC NULLS LAST
             LIMIT %s
-        )
-        LIMIT %s
+        """
+        params = [reverify_days, *params_fn(), remaining]
+        batch = conn.execute(query, params).fetchall()
+        if batch:
+            log.info("stale %-20s  → %d companies", tier_name, len(batch))
+            rows.extend(batch)
+            remaining -= len(batch)
+    return rows
+
+
+def get_companies_to_verify(
+    limit: int = 500,
+    reverify_days: int = 30,
+    stale_ratio: float = 0.2,
+) -> list[dict]:
+    """Return a mix of never-verified and stale companies, prioritised by tier.
+
+    Tiers (highest first):
+      1. Southern Colorado (Pueblo/CO Springs corridor)
+      2. Rest of Colorado
+      3. Large companies with website (100+ employees)
+      4. Large companies without website
+      5. Public/SEC companies (ticker or sec_edgar source)
+      6. Medium companies with website (50-99 employees)
+      7. Medium companies without website
+      8. Any company with a website (<50 employees)
+
+    By default 80% of the batch is fresh (never verified) and 20% stale
+    (oldest signals first).  If either pool is too small the other fills
+    the remaining slots.
+
+    Returns list of dicts with id, name, city, state, website, source, ticker.
     """
-    params: list = [*emp_params, fresh_limit, reverify_days, *emp_params, stale_limit, limit]
+    pool = get_pool()
+    stale_limit = max(1, int(limit * stale_ratio))
+    fresh_limit = limit - stale_limit
 
     with pool.connection() as conn:
         conn.row_factory = dict_row
-        rows = conn.execute(query, params).fetchall()
-    return rows  # type: ignore[return-value]
+        fresh = _fetch_fresh_tiered(conn, fresh_limit)
+        stale = _fetch_stale_tiered(conn, stale_limit, reverify_days)
+
+    # Back-fill: if one pool is short, let the other expand.
+    total = fresh + stale
+    if len(total) < limit:
+        shortfall = limit - len(total)
+        with pool.connection() as conn:
+            conn.row_factory = dict_row
+            if len(fresh) < fresh_limit:
+                extra = _fetch_stale_tiered(conn, shortfall, reverify_days)
+                total.extend(extra)
+            elif len(stale) < stale_limit:
+                extra = _fetch_fresh_tiered(conn, shortfall)
+                total.extend(extra)
+
+    n_stale = len(stale)
+    log.info("Batch ready: %d fresh + %d stale = %d total",
+             len(total) - n_stale, n_stale, len(total))
+    return total
 
 
 def insert_signal(company_id: UUID, check_type: str, result: dict) -> None:

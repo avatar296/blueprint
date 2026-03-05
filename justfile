@@ -117,6 +117,59 @@ verify-stats:
         count(*) FILTER (WHERE result->>'yelp_closed' = 'true') AS closed \
     FROM company_signals GROUP BY check_type ORDER BY check_type"
 
+# ---------- leads ----------
+
+# Export leads CSV — companies operating without a real website but with positive signals
+export-leads:
+    mkdir -p data
+    docker compose exec postgres psql -U {{db_user}} -d {{db_name}} \
+      -c "\COPY ( \
+        SELECT \
+          c.name                                          AS company_name, \
+          c.city, \
+          c.state, \
+          c.employee_count, \
+          ws.result->>'search_top_url'                    AS website_found, \
+          fb.result->>'facebook_url'                      AS facebook_url, \
+          yl.result->>'yelp_url'                          AS yelp_url, \
+          NOT (yl.result->>'yelp_closed')::boolean        AS yelp_open, \
+          mp.result->>'gmaps_name'                        AS gmaps_name, \
+          cr.result->>'careers_url'                        AS careers_url, \
+          ct.result->>'contact_email'                      AS email, \
+          ct.result->>'contact_phone'                      AS phone, \
+          CASE \
+            WHEN c.employee_count >= 100 THEN 'large' \
+            WHEN c.employee_count >= 50  THEN 'medium' \
+            WHEN c.employee_count >= 10  THEN 'small' \
+            ELSE 'micro' \
+          END                                              AS lead_tier \
+        FROM companies c \
+        LEFT JOIN company_signals ws ON ws.company_id = c.id AND ws.check_type = 'web_search' \
+        LEFT JOIN company_signals fb ON fb.company_id = c.id AND fb.check_type = 'facebook' \
+        LEFT JOIN company_signals yl ON yl.company_id = c.id AND yl.check_type = 'yelp' \
+        LEFT JOIN company_signals mp ON mp.company_id = c.id AND mp.check_type = 'maps' \
+        LEFT JOIN company_signals cr ON cr.company_id = c.id AND cr.check_type = 'careers' \
+        LEFT JOIN company_signals ct ON ct.company_id = c.id AND ct.check_type = 'contact' \
+        WHERE c.name NOT ILIKE '%%delinquent%%' \
+          AND c.name NOT ILIKE '%%dissolved%%' \
+          AND EXISTS ( \
+            SELECT 1 FROM company_signals cs WHERE cs.company_id = c.id \
+          ) \
+          AND ( \
+            ws.result->>'search_top_url' IS NULL \
+            OR ws.result->>'search_top_url' ~ '(yelp\.com|facebook\.com|yellowpages\.com|bbb\.org|manta\.com|dnb\.com|bizapedia\.com|opencorporates\.com|bloomberg\.com|sec\.gov|linkedin\.com)' \
+          ) \
+          AND ( \
+            (yl.result->>'yelp_url' IS NOT NULL AND (yl.result->>'yelp_closed')::boolean IS DISTINCT FROM true) \
+            OR fb.result->>'facebook_url' IS NOT NULL \
+            OR mp.result->>'gmaps_name' IS NOT NULL \
+          ) \
+        ORDER BY c.employee_count DESC NULLS LAST \
+      ) TO STDOUT WITH CSV HEADER" \
+      > data/leads_$(date +%Y-%m-%d).csv
+    @echo "Exported to data/"
+    @wc -l data/leads_*.csv | tail -1
+
 # ---------- dev tools ----------
 
 # Lint all Python services

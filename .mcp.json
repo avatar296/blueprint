@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bytebase/dbhub",
+        "--dsn",
+        "postgresql://blueprint:changeme@localhost:5432/blueprint"
+      ],
+      "env": {}
+    }
+  }
+}
