@@ -20,6 +20,7 @@
 | **Vector Search / pgvector** | Company entity matching via Ollama embeddings stored in PostgreSQL — no external vector DB |
 | **Browser Automation** | Playwright stealth-mode scraping, semantic DOM element scoring, 25+ ATS platform detection |
 | **Data Engineering** | 11-source ingestion pipeline with batch upsert, deduplication, and incremental persistence across 9.5M+ company records |
+| **MCP Server** | Exposes the discovery cascade as a Model Context Protocol tool — any MCP client (Claude Desktop, etc.) can verify companies on demand |
 | **Production Patterns** | Async concurrency with semaphores, DDG circuit breakers, per-company timeout budgets, crash-resilient incremental signal persistence |
 
 ---
@@ -158,6 +159,7 @@ Each company gets up to 8 independent signal checks, stored as JSONB in `company
 | **Web Search** | DuckDuckGo (ddgs) | >= 7.0 |
 | **HTTP** | httpx (async) | >= 0.27 |
 | **Package Manager** | uv (workspace) | Latest |
+| **MCP Server** | Model Context Protocol (FastMCP) | stdio transport |
 | **Task Runner** | just | Justfile recipes |
 | **Infrastructure** | Docker Compose / Hetzner | Ubuntu 24.04 |
 
@@ -187,16 +189,69 @@ blueprint/
 │       │   ├── website.py           # HTTP liveness + parked detection
 │       │   ├── search.py            # DDG web/Facebook/Yelp/Maps
 │       │   └── sec.py               # SEC EDGAR filing checks
-│       └── graph/                   # LangGraph implementation
-│           ├── state.py             # DiscoveryState TypedDict
-│           ├── nodes.py             # 9 graph nodes (wrapping discovery.py)
-│           ├── edges.py             # Conditional routing functions
-│           ├── build.py             # StateGraph assembly + batch runner
-│           └── vectorstore.py       # pgvector entity matching
+│       ├── graph/                   # LangGraph implementation
+│       │   ├── state.py             # DiscoveryState TypedDict
+│       │   ├── nodes.py             # 9 graph nodes (wrapping discovery.py)
+│       │   ├── edges.py             # Conditional routing functions
+│       │   ├── build.py             # StateGraph assembly + batch runner
+│       │   └── vectorstore.py       # pgvector entity matching
+│       └── mcp_server.py           # MCP server (discover_company tool)
 │
 ├── services/evaluator/              # Job scoring (planned — LangChain + Ollama)
 ├── services/applier/                # Application automation (planned — LaTeX + Playwright)
 └── services/dashboard/              # Review UI (planned — Next.js)
+```
+
+---
+
+## MCP Server
+
+The discovery cascade is exposed as a [Model Context Protocol](https://modelcontextprotocol.io/) server, allowing any MCP client (Claude Desktop, Cursor, etc.) to run live company verification on demand.
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `discover_company` | Give it a URL — runs the full 4-layer cascade and returns careers page, ATS platform, and contact info |
+| `get_cascade_graph` | Returns the LangGraph cascade as a Mermaid diagram |
+
+### Configuration
+
+Add to your MCP client config (e.g. Claude Desktop `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "blueprint-kyb": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "verifier.mcp_server"],
+      "cwd": "/path/to/blueprint",
+      "env": {
+        "OLLAMA_BASE_URL": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+### Example
+
+```
+> discover_company(url="https://target.com")
+
+{
+  "url": "https://target.com",
+  "cascade": "langgraph",
+  "careers": {
+    "careers_url": "https://corporate.target.com/careers",
+    "ats_platform": "workday",
+    "ats_url": "https://target.wd5.myworkdayjobs.com/targetcareers"
+  },
+  "contact": {
+    "contact_email": null,
+    "contact_phone": null
+  }
+}
 ```
 
 ---
