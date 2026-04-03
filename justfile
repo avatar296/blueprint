@@ -103,6 +103,7 @@ verify batch="500":
         ollama_base_url=cfg.ollama_base_url, ollama_model=cfg.ollama_model, \
         ollama_timeout=cfg.ollama_timeout, ollama_vision_model=cfg.ollama_vision_model, \
         ollama_vision_timeout=cfg.ollama_vision_timeout, \
+        use_langgraph=cfg.use_langgraph, \
     )"
 
 # Run verifier in continuous loop (processes batches until Ctrl-C)
@@ -169,6 +170,113 @@ export-leads:
       > data/leads_$(date +%Y-%m-%d).csv
     @echo "Exported to data/"
     @wc -l data/leads_*.csv | tail -1
+
+# Export careers CSV — companies with discovered career pages and ATS platforms
+export-careers:
+    mkdir -p data
+    docker compose exec postgres psql -U {{db_user}} -d {{db_name}} \
+      -c "\COPY ( \
+        SELECT \
+          c.name                                          AS company_name, \
+          c.city, \
+          c.state, \
+          c.employee_count, \
+          cr.result->>'careers_url'                        AS careers_url, \
+          cr.result->>'ats_platform'                       AS ats_platform, \
+          cr.result->>'ats_url'                            AS ats_url, \
+          ct.result->>'contact_email'                      AS email, \
+          ct.result->>'contact_phone'                      AS phone \
+        FROM companies c \
+        JOIN company_signals cr ON cr.company_id = c.id AND cr.check_type = 'careers' \
+        LEFT JOIN company_signals ct ON ct.company_id = c.id AND ct.check_type = 'contact' \
+        WHERE cr.result->>'careers_url' IS NOT NULL \
+        ORDER BY c.employee_count DESC NULLS LAST \
+      ) TO STDOUT WITH CSV HEADER" \
+      > data/careers_$(date +%Y-%m-%d).csv
+    @echo "Exported to data/"
+    @wc -l data/careers_*.csv | tail -1
+
+# Export remote-friendly companies CSV — filtered to industries likely to have remote tech roles
+export-remote:
+    mkdir -p data
+    docker compose exec postgres psql -U {{db_user}} -d {{db_name}} \
+      -c "\COPY ( \
+        SELECT \
+          c.name                                          AS company_name, \
+          c.industry, \
+          c.city, \
+          c.state, \
+          c.employee_count, \
+          c.website, \
+          c.ticker, \
+          c.exchange, \
+          c.source, \
+          ws.result->>'search_top_url'                    AS website_found, \
+          cr.result->>'careers_url'                        AS careers_url, \
+          cr.result->>'ats_platform'                       AS ats_platform, \
+          cr.result->>'ats_url'                            AS ats_url, \
+          ct.result->>'contact_email'                      AS email, \
+          ct.result->>'contact_phone'                      AS phone \
+        FROM companies c \
+        LEFT JOIN company_signals ws ON ws.company_id = c.id AND ws.check_type = 'web_search' \
+        LEFT JOIN company_signals cr ON cr.company_id = c.id AND cr.check_type = 'careers' \
+        LEFT JOIN company_signals ct ON ct.company_id = c.id AND ct.check_type = 'contact' \
+        WHERE c.name NOT ILIKE '%%delinquent%%' \
+          AND c.name NOT ILIKE '%%dissolved%%' \
+          AND EXISTS ( \
+            SELECT 1 FROM company_signals cs WHERE cs.company_id = c.id \
+          ) \
+          AND ( \
+            (c.employee_count >= 100 AND c.website IS NOT NULL) \
+            OR ((c.ticker IS NOT NULL OR c.source = 'sec_edgar') AND (c.employee_count IS NULL OR c.employee_count < 100)) \
+            OR (c.employee_count BETWEEN 50 AND 99 AND c.website IS NOT NULL) \
+          ) \
+          AND c.industry IS NOT NULL \
+          AND NOT c.industry ILIKE ANY(ARRAY[ \
+            'Real Estate Investment Trusts', 'Real Estate', \
+            'Real Estate Agents & Managers%%', 'Operative Builders', \
+            'real estate investment trust', 'real estate development', \
+            'Opeators of%%', 'Operators of%%', 'Land Subdividers%%', 'renting', \
+            'State Commercial Banks', 'National Commercial Banks', \
+            'Savings Institution%%', 'Commercial Banks%%', 'Credit Union', \
+            'economics of banking', 'bank', \
+            'Crude Petroleum%%', 'Oil & Gas Field%%', 'Drilling Oil%%', \
+            'petroleum industry', 'petroleum', 'Metal Mining', \
+            'Gold and Silver%%', 'Silver Ores', 'Mining%%', 'mining', \
+            'mining industry', 'quarry', 'Mineral Royalty%%', \
+            'Oil Royalty%%', 'Bituminous Coal%%', \
+            'Electric Services', 'Electric & Other Services%%', \
+            'Gas & Other Services%%', 'Natural Gas%%', 'Water Supply', \
+            'electricity generation', 'Cogeneration%%', \
+            'Retail-Eating%%', 'Hotels & Motels', 'restaurant', \
+            'fast food', 'gastronomy', 'hospitality industry', \
+            'fast casual restaurant', 'Hotels, Rooming%%', 'resort', \
+            'system catering', 'cruise line', \
+            'Retail-Auto Dealers%%', 'Retail-Grocery%%', \
+            'Retail-Building Materials%%', 'Retail-Lumber%%', \
+            'Retail-Drug Stores%%', 'Retail-Furniture%%', \
+            'Retail-Shoe%%', 'Retail-Convenience%%', 'Retail-Food Stores', \
+            'Retail-Home Furniture%%', 'Retail-Variety%%', \
+            'truck stop', 'outlet store', 'toy store', \
+            'Agricultural Production%%', 'Agricultural Services', \
+            'agriculture', 'agribusiness', 'Agricultural Prod-Livestock%%', \
+            'Heavy Construction%%', 'General Bldg Contractors%%', \
+            'Construction - Special Trade%%', 'Water, Sewer, Pipeline%%', \
+            'Electrical Work', 'construction', 'Construction', \
+            'Trucking%%', 'Water Transportation', 'Deep Sea Foreign%%', \
+            'Pipe Lines%%', 'Truck & Bus Bodies', 'Truck Trailers', \
+            'Motor Homes', 'Mobile Homes', 'rail transport', \
+            'Railroads%%', 'taxi service', \
+            'Blank Checks', \
+            'Meat Packing%%', 'Poultry Slaughtering%%', \
+            'meatpacking industry', 'dairy industry', 'dairy product', \
+            'Refuse Systems', 'Hazardous Waste%%', 'prison', 'sex industry' \
+          ]) \
+        ORDER BY c.employee_count DESC NULLS LAST \
+      ) TO STDOUT WITH CSV HEADER" \
+      > data/remote_companies_$(date +%Y-%m-%d).csv
+    @echo "Exported to data/"
+    @wc -l data/remote_companies_$(date +%Y-%m-%d).csv
 
 # ---------- dev tools ----------
 

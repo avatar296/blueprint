@@ -1,250 +1,298 @@
 # Architecture
 
-Blueprint is a four-layer, containerized pipeline that discovers job postings, scores them against a career profile, presents them for human review, and automates the application process. Every component runs on private infrastructure to maintain full data sovereignty.
+Blueprint is an agentic company intelligence platform built as a set of decoupled Python services sharing a PostgreSQL database. The two operational services — **Scout** (sourcing) and **Verifier** (signal checks + discovery) — run as batch pipelines via `just` recipes. Three additional services (Evaluator, Applier, Dashboard) are scaffolded for the next phase.
 
-## System Architecture Diagram
+## System Architecture
 
 ```mermaid
 flowchart TD
-    Sources["Job Sources\n(LinkedIn, Indeed, Niche Boards)"]
-    Scout["Scout\n(Ingestion Layer)"]
-    DB[(PostgreSQL)]
-    Evaluator["Evaluator\n(Logic Layer)"]
-    Ollama["Ollama\n(Llama 3 - Local)"]
-    Profile["Master Profile\n(JSON)"]
-    Dashboard["Dashboard\n(Human-in-the-Loop)"]
-    Authentik["Authentik\n(OIDC)"]
-    Applier["Applier\n(Execution Layer)"]
+    subgraph Sources["Public Data Sources"]
+        SEC["SEC EDGAR"]
+        Wiki["Wikidata"]
+        Pro["ProPublica"]
+        SOS["State SOS\n(CO, TX, NY, OR, IA)"]
+        FDIC["FDIC"]
+        NCUA["NCUA"]
+        SBA["SBA PPP"]
+    end
+
+    subgraph Scout["Scout Service\n(Company Sourcing)"]
+        Runner["Sourcing Runner"]
+        Providers["11 Provider Modules"]
+    end
+
+    DB[(PostgreSQL 16\n+ pgvector\n9.5M+ companies)]
+
+    subgraph Verifier["Verifier Service\n(Signal Checks + Discovery)"]
+        Phase1["Phase 1: Website Liveness\n(async httpx, 50 concurrent)"]
+        Phase2["Phase 2: SEC Filings\n(EDGAR API, 10 concurrent)"]
+        Phase3["Phase 3: DDG Search\n(web + FB + Yelp + Maps)"]
+        Phase4["Phase 4: Discovery Cascade\n(LangGraph or custom async)"]
+        Phase5["Phase 5: Backfill\n(re-discover from search URLs)"]
+    end
+
+    subgraph Ollama["Ollama (Local)"]
+        Llama["Llama 3\n(text classification)"]
+        Vision["minicpm-v\n(vision analysis)"]
+        Embed["Embeddings\n(entity matching)"]
+    end
+
+    subgraph Exports["Data Exports"]
+        Leads["Leads CSV"]
+        Careers["Careers CSV"]
+        Remote["Remote-Filtered CSV"]
+    end
 
     Sources --> Scout
     Scout --> DB
-    DB --> Evaluator
-    Ollama --> Evaluator
-    Profile --> Evaluator
-    Evaluator --> DB
-    DB --> Dashboard
-    Authentik --> Dashboard
-    Dashboard --> Applier
-    Applier --> Sources
+    DB --> Verifier
+    Verifier --> DB
+    Ollama -.-> Phase4
+    Embed -.-> DB
+    DB --> Exports
 ```
 
 ## Project Structure
 
 ```
 blueprint/
-├── docker-compose.yml          # Service orchestration (dev & prod)
-├── .env.example                # Environment variable template
-├── ARCHITECTURE.md             # This file
-├── CLAUDE.md                   # Project instructions for AI tooling
-├── README.md                   # Project overview and getting started
-├── data/
-│   └── master_profile.json     # 20-year career profile (gitignored PII)
+├── docker-compose.yml              # PostgreSQL (pgvector), Ollama, pgAdmin
+├── justfile                         # Dev task runner
+├── pyproject.toml                   # uv workspace root
 ├── db/
 │   └── init/
-│       └── 001_schema.sql      # PostgreSQL schema (auto-runs on first start)
-├── docs/
-│   └── adr/                    # Architecture Decision Records
-│       ├── README.md           # ADR index
-│       └── 001-*.md … 010-*.md # Individual decisions
-└── services/
-    ├── scout/                  # Ingestion layer (Python + Playwright)
-    │   ├── Dockerfile
-    │   ├── pyproject.toml
-    │   └── src/scout/
-    ├── evaluator/              # Logic layer (Python + LangChain)
-    │   ├── Dockerfile
-    │   ├── pyproject.toml
-    │   └── src/evaluator/
-    ├── applier/                # Execution layer (Python + LaTeX)
-    │   ├── Dockerfile
-    │   ├── pyproject.toml
-    │   └── src/applier/
-    └── dashboard/              # Human-in-the-loop (Next.js)
-        ├── Dockerfile
-        ├── package.json
-        ├── next.config.ts
-        ├── tailwind.config.ts
-        └── src/app/
+│       ├── 001_schema.sql           # Jobs table, status enum
+│       ├── 003_companies.sql        # Companies table
+│       ├── 009_company_signals.sql  # Signal tracking (JSONB)
+│       └── 011_pgvector_embeddings.sql  # Vector embeddings table
+├── services/
+│   ├── common/                      # Shared DB layer (psycopg, connection pool)
+│   ├── scout/                       # Company sourcing (11 providers)
+│   ├── verifier/                    # Verification + LangGraph discovery
+│   ├── evaluator/                   # Job scoring (planned)
+│   ├── applier/                     # Application automation (planned)
+│   └── dashboard/                   # Review UI (planned)
+└── docs/adr/                        # 10 Architecture Decision Records
 ```
 
-## Layers
+## Scout: Company Sourcing Pipeline
 
-### Scout (Ingestion)
+The Scout service fetches company data from 11 public providers and batch-upserts into PostgreSQL with deduplication on normalized name + source + source_id.
 
-- **Purpose:** Continuously discover and ingest job postings from multiple sources.
-- **Technology:** Python + Playwright in stealth mode to avoid bot detection.
-- **Input:** Job board search queries filtered to senior-level roles (Principal Architect, Data Scientist, Staff Engineer) in the Pueblo/Colorado Springs corridor and remote.
-- **Output:** Raw job descriptions stored in PostgreSQL with metadata (source, URL, date, title, company).
-- **Design Decision:** Playwright stealth mode was chosen over API-based scraping because most job boards either lack public APIs or heavily rate-limit them. Stealth mode mimics human browsing patterns to maintain access.
+### Providers
 
-### Evaluator (Logic)
+| Provider | Data Extracted | Scale |
+|----------|---------------|-------|
+| SEC EDGAR | Tickers, SIC codes, employee counts, total assets, filer category | ~10K public companies |
+| Wikidata | Names, descriptions, founding dates, industries | ~50K entities |
+| ProPublica | Nonprofit organizations | ~1.8M nonprofits |
+| Colorado SOS | State business registrations | ~2M entities |
+| Texas SOS | State business registrations | ~3M entities |
+| New York SOS | State business registrations | ~1M entities |
+| Oregon SOS | State business registrations | ~800K entities |
+| Iowa SOS | State business registrations | ~400K entities |
+| FDIC | FDIC-insured banks | ~5K banks |
+| NCUA | Credit unions | ~5K credit unions |
+| SBA PPP | PPP loan recipients (employee counts, NAICS) | ~1M businesses |
 
-- **Purpose:** Score each job description against the Master Profile to determine fit.
-- **Technology:** LangChain orchestration with Llama 3 running locally via Ollama.
-- **Input:** Raw job descriptions from PostgreSQL + the Master Profile JSON.
-- **Output:** A 0-100 "Fit Score" per job, written back to PostgreSQL with scoring rationale.
-- **Design Decision:** A local LLM (Llama 3/Ollama) is used instead of cloud APIs to keep all career data on private infrastructure. LangChain provides the orchestration layer for structured prompt chaining and future extensibility.
+### Companies Table
 
-### Dashboard (Human-in-the-Loop)
+| Column | Type | Source |
+|--------|------|--------|
+| name / normalized_name | TEXT | All providers |
+| employee_count | INTEGER | SEC, SBA PPP |
+| industry / sic_code / naics_code | TEXT | SEC, Wikidata |
+| city / state | TEXT | SOS, SEC |
+| website | TEXT | SEC, Wikidata |
+| ticker / exchange | TEXT | SEC |
+| source / source_id | TEXT | Provider identifier |
+| total_assets | BIGINT | SEC |
+| filer_category | TEXT | SEC (large accelerated, accelerated, etc.) |
 
-- **Purpose:** Present scored opportunities for human review, editing, and approval.
-- **Technology:** Next.js with Tailwind CSS using a "Mountain Modern Slate & Teal" design system.
-- **Input:** Scored job listings from PostgreSQL, ranked by Fit Score.
-- **Output:** Approved/rejected decisions and any manual edits to application materials.
-- **Design Decision:** A dedicated dashboard keeps a human in the loop before any application is submitted. The UI is designed for rapid triage — scan scores, review rationale, approve or reject in bulk.
+## Verifier: Multi-Phase Signal Pipeline
 
-### Applier (Execution)
+The Verifier runs 5 phases per batch with maximum parallelism. Signals are persisted incrementally after each phase so partial progress survives crashes.
 
-- **Purpose:** Generate tailored application materials and submit them automatically.
-- **Technology:** Playwright for form automation + Headless LaTeX for PDF generation.
-- **Input:** Approved job listings and the Master Profile.
-- **Output:** ATS-optimized PDF resumes/cover letters submitted through platforms like Workday and Lever.
-- **Design Decision:** LaTeX produces consistently formatted, ATS-friendly PDFs. Playwright handles the diversity of application form implementations across different hiring platforms.
-
-## Data Flow
-
-1. **Discovery** — Scout queries LinkedIn, Indeed, and niche boards for matching roles.
-2. **Extraction** — Playwright renders each listing and extracts the full job description.
-3. **Deduplication** — Scout checks PostgreSQL for existing entries to avoid reprocessing.
-4. **Storage** — New listings are written to PostgreSQL with source metadata.
-5. **Retrieval** — Evaluator pulls unscored listings from the database.
-6. **Profile Load** — Evaluator reads the Master Profile JSON from disk.
-7. **Scoring** — LangChain sends the JD + Profile to Llama 3 via Ollama for analysis.
-8. **Score Storage** — Fit Scores (0-100) and rationale are written back to PostgreSQL.
-9. **Presentation** — Dashboard queries PostgreSQL for scored listings, ordered by score.
-10. **Review** — User reviews, edits, and approves or rejects each opportunity.
-11. **Material Generation** — Applier generates a tailored LaTeX resume/cover letter for each approved role.
-12. **Submission** — Playwright navigates the target platform and submits the application.
-13. **Status Update** — Application status is recorded back in PostgreSQL.
-
-## Database Schema
-
-The database is initialized automatically on first PostgreSQL start via `db/init/001_schema.sql`.
-
-### Pipeline Status Enum
-
-The `job_status` ENUM defines the state machine for the job pipeline:
+### Phase Execution
 
 ```
-scraped → scoring → scored → reviewing → approved → generating → applying → applied
-                                       → rejected
-                              (any state) → error
+Phase 1 (Website) ──────────────┐
+Phase 2 (SEC) ──────────────────┼── all start concurrently
+Phase 3 (DDG Search) ───────────┘
+         │
+Phase 4 (Discovery) ──���─────────── starts after Phase 1 completes
+         │
+Phase 5 (Backfill) ─────────────── after Phase 4 + Phase 3 complete
 ```
 
-| Status | Set By | Meaning |
-|--------|--------|---------|
-| `scraped` | Scout | Raw listing ingested from a job board |
-| `scoring` | Evaluator | LLM scoring in progress |
-| `scored` | Evaluator | Fit Score assigned, awaiting review |
-| `reviewing` | Dashboard | User is actively reviewing |
-| `approved` | Dashboard | User approved for application |
-| `rejected` | Dashboard | User rejected |
-| `generating` | Applier | Resume/cover letter generation in progress |
-| `applying` | Applier | Form submission in progress |
-| `applied` | Applier | Application submitted successfully |
-| `error` | Any | Processing failed (retryable) |
+### Signal Types
 
-### Jobs Table
+All signals stored in `company_signals` table as `(company_id, check_type, result JSONB)` with upsert on conflict.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `id` | `UUID` (PK) | Auto-generated via `gen_random_uuid()` |
-| `source` | `TEXT` | Platform identifier (`linkedin`, `indeed`, etc.) |
-| `source_id` | `TEXT` | Platform-specific job ID |
-| `url` | `TEXT` | Original listing URL |
-| `title` | `TEXT` | Job title |
-| `company` | `TEXT` | Company name |
-| `description` | `TEXT` | Full job description |
-| `location` | `TEXT` | Job location |
-| `remote` | `BOOLEAN` | Remote eligibility |
-| `salary_min` / `salary_max` | `INTEGER` | Salary range (when available) |
-| `date_posted` | `TIMESTAMPTZ` | When the job was posted |
-| `date_scraped` | `TIMESTAMPTZ` | When Scout ingested it |
-| `fit_score` | `SMALLINT` (0-100) | LLM-assigned fit score |
-| `score_rationale` | `TEXT` | LLM explanation of the score |
-| `scored_at` | `TIMESTAMPTZ` | When scoring completed |
-| `status` | `job_status` | Current pipeline state |
-| `applied_at` | `TIMESTAMPTZ` | When application was submitted |
-| `resume_path` | `TEXT` | Path to generated resume PDF |
-| `created_at` / `updated_at` | `TIMESTAMPTZ` | Audit timestamps (auto-managed) |
+| Check Type | Method | Result Schema |
+|-----------|--------|---------------|
+| `website` | httpx HEAD/GET | `{website_url, website_status, website_reachable, website_redirect_url, website_title, website_is_parked}` |
+| `web_search` | DuckDuckGo text search | `{search_top_url, search_top_snippet, search_result_count}` |
+| `facebook` | DDG site:facebook.com | `{facebook_url}` |
+| `yelp` | DDG site:yelp.com | `{yelp_url, yelp_closed}` |
+| `maps` | DDG Google Maps | `{gmaps_name, gmaps_closed}` |
+| `sec` | SEC EDGAR API | `{sec_filing_type, sec_last_filing_date}` |
+| `careers` | Discovery cascade | `{careers_url, ats_platform, ats_url}` |
+| `contact` | Page extraction | `{contact_email, contact_phone, contact_page_url}` |
 
-### Key Indexes
+### Tiered Company Prioritization
 
-- `idx_jobs_status` — Fast lookups by pipeline state (used by every service)
-- `idx_jobs_fit_score` — Descending score for Dashboard ranking
-- `idx_jobs_source_source_id` — Source lookups
-- `idx_jobs_date_scraped` — Chronological ordering
-- `idx_jobs_dedup` — **UNIQUE** on `(source, source_id)` to prevent duplicate ingestion
+Verification batches are filled by priority tier:
 
-## The Master Profile
+1. Large companies with website (100+ employees)
+2. Public/SEC companies (ticker or sec_edgar source)
+3. Medium companies with website (50-99 employees)
+4. Large companies without website
+5. Southern Colorado (Pueblo/CO Springs corridor)
+6. Rest of Colorado
+7. Medium without website
+8. Any company with website (<50 employees)
 
-- **Location:** `/data/master_profile.json`
-- **Purpose:** A structured JSON representation of a 20-year technical career, used as the ground truth for JD scoring.
-- **Structure:**
-  - `header` — Name, title, contact, location, clearance level
-  - `skill_matrix` — Categorized technical skills with proficiency levels
-  - `experience` — Chronological role history with responsibilities and achievements
-  - `education` — Degrees, certifications, and continuing education
-  - `preferences` — Target roles, salary range, location constraints, remote policy
-- **Usage:** The Evaluator loads this file for every scoring run, comparing each JD field against the corresponding profile section.
-- **Privacy:** This file contains PII and career history. It never leaves the Hetzner server and is excluded from version control via `.gitignore`.
+80% fresh (never-verified), 20% stale (oldest signals first, >30 days).
 
-## Deployment Topology
+## KYB Discovery Cascade
 
-All services run on a single dedicated Hetzner server (Ubuntu 24.04). Docker Compose is used for local development; Coolify manages production container orchestration and CI/CD.
+The core discovery logic finds career pages and identifies ATS platforms via a 4-layer escalation cascade. Two implementations exist with identical behavior:
+
+### Custom Async (`discovery.py`, 1,497 lines)
+
+Hand-rolled if/else cascade using Playwright + raw httpx calls to Ollama.
+
+### LangGraph StateGraph (`graph/` module)
+
+9-node graph with conditional edges. Same logic wrapped in LangGraph nodes, LLM calls via LangChain ChatOllama.
 
 ```mermaid
-flowchart TD
-    subgraph Hetzner["Hetzner Dedicated Server (Ubuntu 24.04)"]
-        subgraph Coolify["Coolify (CI/CD & Orchestration)"]
-            ScoutC["Scout Container\n(Python)"]
-            EvalC["Evaluator Container\n(Python + Ollama)"]
-            DashC["Dashboard Container\n(Next.js)"]
-            ApplyC["Applier Container\n(Python + LaTeX)"]
-            PG[(PostgreSQL)]
-            Auth["Authentik\n(OIDC Provider)"]
-        end
-    end
-
-    GitHub["GitHub Repository"] -->|"Signed Webhook"| Coolify
-    ScoutC --> PG
-    EvalC --> PG
-    DashC --> PG
-    ApplyC --> PG
-    Auth --> DashC
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD
+    __start__([Start]) --> navigate_homepage
+    navigate_homepage -.-> |parked| facebook_fallback
+    navigate_homepage -.-> |failed| __end__
+    navigate_homepage -.-> entity_match
+    entity_match --> score_dom
+    score_dom -.-> |found| navigate_careers
+    score_dom -.-> |no match| llm_classify
+    score_dom -.-> |no LLM| probe_fallback
+    llm_classify -.-> |found| navigate_careers
+    llm_classify -.-> |no match| vision_analyze
+    llm_classify -.-> |no vision| probe_fallback
+    vision_analyze -.-> |found| navigate_careers
+    vision_analyze -.-> |no match| probe_fallback
+    navigate_careers --> extract_contact
+    probe_fallback --> extract_contact
+    extract_contact --> __end__([End])
+    facebook_fallback --> __end__
 ```
 
-## Security Model
+### Layer Details
 
-- **Data Sovereignty:** All data (career profile, scraped listings, credentials) stays on the private Hetzner server. No third-party cloud services process PII.
-- **Authentication:** Authentik provides OIDC-based SSO for Dashboard access. No shared passwords or open endpoints.
-- **Local LLM:** Ollama runs Llama 3 locally, so job descriptions and career data are never sent to external AI APIs.
-- **Signed Webhooks:** GitHub-to-Coolify CI/CD triggers use signed webhooks to prevent unauthorized deployments.
-- **Credential Management:** LinkedIn/Indeed credentials and API endpoints are stored in `.env`, excluded from version control.
-- **Network Isolation:** Containers communicate over internal Docker networks. Only the Dashboard and Authentik expose public-facing ports behind a reverse proxy.
+**Layer 1: Deterministic DOM Scoring** — Extracts all `<a>` and `<button>` elements from the rendered page. Scores each for "careers-ness":
+
+| Signal | Score |
+|--------|-------|
+| Exact text match ("careers", "jobs", "open positions") | 0.95 |
+| Phrase match ("join our team", "we're hiring") | 0.80 |
+| ATS domain in href (greenhouse.io, lever.co) | 0.90 |
+| ARIA label / title attribute | 0.70 |
+| URL path (/careers, /jobs) | 0.50 |
+
+Modifiers: nav/header location ×1.1, footer ×1.05, hidden ×0.3. Threshold: 0.4.
+
+**Layer 2: LLM Text Classification** — Sends numbered candidate elements to Ollama/Llama 3. Prompt: "Which element most likely leads to the careers page?" Response validated against careers-signal regex.
+
+**Layer 3: Vision Model** — Injects red numbered badges over candidate elements via JS, takes a screenshot, sends to Ollama vision model (minicpm-v). Same prompt pattern, same validation.
+
+**Layer 4: Probe Fallback** — Brute-force probes `/careers`, `/jobs`, `careers.{domain}`, `jobs.{domain}`. Validates responses: rejects login pages, off-domain redirects (unless ATS), pages without careers signals.
+
+### ATS Detection (6 Layers, 25+ Platforms)
+
+After finding a careers page by any method:
+
+1. Final URL domain pattern matching
+2. Page href scanning
+3. Content patterns ("Powered by X")
+4. iframe src attributes
+5. script src attributes
+6. Full HTML content scan
+
+Platforms: Greenhouse, Lever, Workday, iCIMS, Taleo, Ashby, SmartRecruiters, BambooHR, Paycom, Jobvite, ADP, UltiPro, SAP SuccessFactors, Eightfold, Phenom, Avature, Brassring, Cornerstone, Dayforce, Rippling, JazzHR, Recruitee, Personio.
+
+## pgvector Entity Matching
+
+The LangGraph cascade includes an `entity_match` node that embeds the company name via Ollama and queries PostgreSQL for similar already-verified companies using cosine distance.
+
+```sql
+-- company_embeddings table
+CREATE TABLE company_embeddings (
+    company_id   UUID NOT NULL REFERENCES companies(id),
+    embedding    vector(4096),  -- Llama 3 embedding dimension
+    UNIQUE (company_id)
+);
+
+-- Cosine similarity query
+SELECT c.name, ce.embedding <=> $1::vector AS distance
+FROM company_embeddings ce
+JOIN companies c ON c.id = ce.company_id
+WHERE ce.embedding <=> $1::vector < 0.3
+ORDER BY distance LIMIT 3;
+```
 
 ## Technology Matrix
 
-| Layer | Language | Key Libraries | Container Base |
-|---|---|---|---|
-| Scout | Python 3.12 | Playwright ≥1.49, psycopg ≥3.2 | `python:3.12-slim` |
-| Evaluator | Python 3.12 | LangChain ≥0.3, LangChain-Ollama ≥0.3, psycopg ≥3.2 | `python:3.12-slim` |
-| Dashboard | Node.js 20 | Next.js 15, React 19, Tailwind CSS 4 | `node:20-alpine` (3-stage) |
-| Applier | Python 3.12 | Playwright ≥1.49, Jinja2 ≥3.1, psycopg ≥3.2 | `python:3.12-slim` + TeX Live |
-| Database | — | PostgreSQL 16 | `postgres:16-alpine` |
-| LLM | — | Ollama (Llama 3) | `ollama/ollama:latest` |
-| Identity | — | Authentik (deferred) | `ghcr.io/goauthentik/server` |
+| Layer | Language | Key Libraries | Container |
+|-------|----------|--------------|-----------|
+| Scout | Python 3.12 | httpx, psycopg 3, openpyxl | `python:3.12-slim` |
+| Verifier | Python 3.12 | LangGraph 1.0, LangChain 1.2, Playwright, httpx, ddgs | `python:3.12-slim` |
+| Common | Python 3.12 | psycopg 3, psycopg-pool | (shared library) |
+| Database | — | PostgreSQL 16 + pgvector | `pgvector/pgvector:pg16` |
+| LLM | — | Ollama (Llama 3, minicpm-v) | `ollama/ollama:latest` |
+| Evaluator | Python 3.12 | LangChain, LangChain-Ollama | Planned |
+| Applier | Python 3.12 | Playwright, Jinja2, LaTeX | Planned |
+| Dashboard | Node.js 20 | Next.js 15, React 19, Tailwind CSS 4 | Planned |
+
+## Database Schema
+
+### Core Tables
+
+- **companies** — 9.5M+ records with name, industry, SIC/NAICS, location, employee count, website, ticker, source
+- **company_signals** — JSONB signal store, one row per (company_id, check_type), upsert on conflict
+- **company_embeddings** — pgvector embeddings for entity matching
+- **sourcing_runs** — Tracks each provider execution (started, completed, row counts)
+- **jobs** — Job listings pipeline (scraped → scored → approved → applied)
+
+### Key Indexes
+
+- `companies_normalized_name_source_idx` — Deduplication during sourcing
+- `company_signals (company_id, check_type)` — UNIQUE, enables upsert
+- `jobs (source, source_id)` — UNIQUE, prevents duplicate ingestion
+- `jobs (status)` — Pipeline state lookups
+
+## Deployment
+
+All services run on a single Hetzner dedicated server (Ubuntu 24.04). Docker Compose manages PostgreSQL and Ollama. Python services run via `just` recipes using a shared `uv` workspace for development. Production deployment via Coolify with signed GitHub webhooks.
+
+## Security Model
+
+- **Data Sovereignty** — All data stays on the private Hetzner server. No third-party cloud services process company data or PII.
+- **Local LLM** — Ollama runs locally; no data sent to external AI APIs.
+- **Credential Management** — Secrets in `.env`, excluded from version control.
+- **Network Isolation** — Containers on internal Docker networks; only PostgreSQL exposed on localhost.
 
 ## Architecture Decision Records
 
-This project uses [Architecture Decision Records](https://adr.github.io/madr/) to document significant technical choices. Each ADR captures the context, decision, and consequences of an architectural choice.
+10 ADRs documenting key technical choices in [`docs/adr/`](docs/adr/README.md).
 
-See the full index at [`docs/adr/README.md`](docs/adr/README.md).
+## Planned: Next Phase
 
-## Future Considerations
-
-- **Additional Sources** — Expand Scout to cover Glassdoor, AngelList, and company career pages directly.
-- **Scoring Refinement** — Fine-tune the Llama 3 model on historical application outcomes to improve Fit Score accuracy.
-- **Application Tracking** — Add post-submission status tracking (applied, viewed, interview, offer, rejected).
-- **Multi-Profile Support** — Allow multiple Master Profiles for different career pivots or role types.
-- **Notifications** — Push alerts (email, Slack, or mobile) when high-scoring roles are discovered.
+- **Evaluator** — LangChain + Ollama scoring of job descriptions against a Master Profile (0-100 fit score)
+- **Applier** — LaTeX resume generation + Playwright form automation for Workday, Lever, etc.
+- **Dashboard** — Next.js review UI for scored opportunities

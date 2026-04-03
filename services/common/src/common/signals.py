@@ -22,44 +22,47 @@ _SOUTHERN_CO_CITIES = [
 # Each tier: (name, WHERE clause, extra-params factory).
 # Clauses reference table alias ``c`` for companies.
 _FRESH_TIERS: list[tuple[str, str, Callable[[], list]]] = [
+    ("large_with_website",
+     "c.employee_count >= 100 AND c.website IS NOT NULL",
+     lambda: []),
+    ("public_companies",
+     "(c.ticker IS NOT NULL OR c.source = 'sec_edgar')"
+     " AND (c.employee_count IS NULL OR c.employee_count < 100)",
+     lambda: []),
+    ("medium_with_website",
+     "c.employee_count BETWEEN 50 AND 99 AND c.website IS NOT NULL",
+     lambda: []),
+    ("large",
+     "c.employee_count >= 100 AND c.website IS NULL",
+     lambda: []),
     ("southern_co",
      "c.state = 'CO' AND lower(c.city) = ANY(%s)",
      lambda: [_SOUTHERN_CO_CITIES]),
     ("colorado",
      "c.state = 'CO' AND (c.city IS NULL OR lower(c.city) != ALL(%s))",
      lambda: [_SOUTHERN_CO_CITIES]),
-    ("large_with_website",
-     "c.employee_count >= 100 AND c.website IS NOT NULL"
-     " AND (c.state IS NULL OR c.state <> 'CO')",
-     lambda: []),
-    ("large",
-     "c.employee_count >= 100 AND c.website IS NULL"
-     " AND (c.state IS NULL OR c.state <> 'CO')",
-     lambda: []),
-    ("public_companies",
-     "(c.ticker IS NOT NULL OR c.source = 'sec_edgar')"
-     " AND (c.employee_count IS NULL OR c.employee_count < 100)"
-     " AND (c.state IS NULL OR c.state <> 'CO')",
-     lambda: []),
-    ("medium_with_website",
-     "c.employee_count BETWEEN 50 AND 99 AND c.website IS NOT NULL"
-     " AND (c.state IS NULL OR c.state <> 'CO')",
-     lambda: []),
     ("medium",
-     "c.employee_count BETWEEN 50 AND 99 AND c.website IS NULL"
-     " AND (c.state IS NULL OR c.state <> 'CO')",
+     "c.employee_count BETWEEN 50 AND 99 AND c.website IS NULL",
      lambda: []),
     ("has_website",
      "c.website IS NOT NULL"
-     " AND (c.employee_count IS NULL OR c.employee_count < 50)"
-     " AND (c.state IS NULL OR c.state <> 'CO')",
+     " AND (c.employee_count IS NULL OR c.employee_count < 50)",
      lambda: []),
 ]
 
 _COLS = "c.id, c.name, c.normalized_name, c.city, c.state, c.website, c.source, c.ticker"
 
-# Skip companies whose name contains state-filing status markers (dead/defunct).
-_DEAD_FILTER = "AND c.name NOT ILIKE '%%delinquent%%' AND c.name NOT ILIKE '%%dissolved%%'"
+# Skip companies whose name contains state-filing status markers (dead/defunct)
+# or shell-entity patterns (holdings, trusts, etc.) with no employees or website.
+_DEAD_FILTER = (
+    "AND c.name NOT ILIKE '%%delinquent%%' AND c.name NOT ILIKE '%%dissolved%%'"
+    " AND NOT ("
+    "  c.employee_count IS NULL AND c.website IS NULL"
+    "  AND (c.name ILIKE '%%holdings%%' OR c.name ILIKE '%%properties%%'"
+    "       OR c.name ILIKE '%%trust%%' OR c.name ILIKE '%%investments%%'"
+    "       OR c.name ILIKE '%%enterprises%%')"
+    ")"
+)
 
 
 def _fetch_fresh_tiered(conn, remaining: int) -> list[dict]:
@@ -123,14 +126,14 @@ def get_companies_to_verify(
 ) -> list[dict]:
     """Return a mix of never-verified and stale companies, prioritised by tier.
 
-    Tiers (highest first):
-      1. Southern Colorado (Pueblo/CO Springs corridor)
-      2. Rest of Colorado
-      3. Large companies with website (100+ employees)
-      4. Large companies without website
-      5. Public/SEC companies (ticker or sec_edgar source)
-      6. Medium companies with website (50-99 employees)
-      7. Medium companies without website
+    Tiers (highest first — remote-friendly companies prioritised):
+      1. Large companies with website (100+ employees)
+      2. Public/SEC companies (ticker or sec_edgar source)
+      3. Large companies without website (100+)
+      4. Medium companies with website (50-99 employees)
+      5. Southern Colorado (Pueblo/CO Springs corridor)
+      6. Rest of Colorado
+      7. Medium companies without website (50-99)
       8. Any company with a website (<50 employees)
 
     By default 80% of the batch is fresh (never verified) and 20% stale

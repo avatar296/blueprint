@@ -21,6 +21,7 @@ class VerifierConfig:
     ollama_vision_timeout: float = 15.0
     reverify_days: int = 30
     idle_sleep_seconds: int = 30
+    use_langgraph: bool = False
 
 
 def load_config() -> VerifierConfig:
@@ -51,6 +52,8 @@ def load_config() -> VerifierConfig:
         cfg.reverify_days = int(v)
     if v := os.getenv("VERIFIER_IDLE_SLEEP_SECONDS"):
         cfg.idle_sleep_seconds = int(v)
+    if os.getenv("VERIFIER_USE_LANGGRAPH", "").lower() in ("1", "true", "yes"):
+        cfg.use_langgraph = True
 
     log.info(
         "Config: batch=%d, website_concurrency=%d, ddg_limit=%d, sec_concurrency=%d, discovery_concurrency=%d, ollama=%s, model=%s, vision_model=%s, reverify_days=%d, idle_sleep=%ds",
@@ -65,4 +68,6 @@ def load_config() -> VerifierConfig:
         cfg.reverify_days,
         cfg.idle_sleep_seconds,
     )
+    if cfg.use_langgraph:
+        log.info("LangGraph discovery cascade ENABLED")
     return cfg

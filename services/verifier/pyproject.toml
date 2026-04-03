@@ -10,6 +10,10 @@ dependencies = [
     "python-dotenv>=1.0",
     "playwright>=1.49",
     "playwright-stealth>=1.0",
+    "langchain>=0.3",
+    "langchain-ollama>=0.3",
+    "langgraph>=1.0",
+    "langgraph-checkpoint-postgres>=2.0",
 ]
 
 [build-system]

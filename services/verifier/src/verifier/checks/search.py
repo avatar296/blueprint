@@ -6,6 +6,7 @@ import re
 import time
 
 from ddgs import DDGS
+from ddgs.exceptions import RatelimitException
 
 log = logging.getLogger("verifier.checks.search")
 
@@ -84,6 +85,8 @@ async def search_web(name: str, city: str | None = None, state: str | None = Non
             top = results[0]
             result["search_top_snippet"] = top.get("body", "")[:1000]
             result["search_top_url"] = top.get("href")
+    except RatelimitException:
+        raise
     except Exception:
         log.debug("Web search failed for %r", query, exc_info=True)
 
@@ -114,6 +117,8 @@ async def search_facebook(name: str, city: str | None = None, state: str | None 
             if "facebook.com/" in href and not any(s in href for s in _fb_skip):
                 result["facebook_url"] = href
                 break
+    except RatelimitException:
+        raise
     except Exception:
         log.debug("Facebook search failed for %r", name, exc_info=True)
 
@@ -146,6 +151,8 @@ async def search_yelp(name: str, city: str | None = None, state: str | None = No
                 snippet = r.get("body", "")
                 result["yelp_closed"] = _looks_closed(title, snippet)
                 break
+    except RatelimitException:
+        raise
     except Exception:
         log.debug("Yelp search failed for %r", name, exc_info=True)
 
@@ -181,6 +188,8 @@ async def search_maps(name: str, city: str | None = None, state: str | None = No
                 result["gmaps_name"] = gmaps_name or None
                 result["gmaps_closed"] = _looks_closed(title, snippet)
                 break
+    except RatelimitException:
+        raise
     except Exception:
         log.debug("Maps search failed for %r", name, exc_info=True)
 

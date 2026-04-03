@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-blueprint}
@@ -22,6 +22,7 @@ services:
       - huge_pages=try
       - -c
       - max_wal_size=4GB
+    shm_size: '256m'
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
