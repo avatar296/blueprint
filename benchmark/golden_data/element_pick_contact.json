@@ -1,0 +1,190 @@
+{
+  "version": "1.0",
+  "goal": "contact",
+  "cases": [
+    {
+      "id": "contact-001",
+      "company_name": "Acme Corp",
+      "url": "https://www.acmecorp.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Home", "href": "/", "inNav": true, "visible": true},
+        {"text": "About Us", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Products", "href": "/products", "inNav": true, "visible": true},
+        {"text": "Careers", "href": "/careers", "inNav": true, "visible": true},
+        {"text": "Contact", "href": "/contact", "inNav": true, "visible": true},
+        {"text": "Blog", "href": "/blog", "inNav": true, "visible": true}
+      ],
+      "expected_pick_idx": 4,
+      "expected_pick_text": "Contact",
+      "difficulty": "easy",
+      "notes": "Standard nav with explicit Contact link"
+    },
+    {
+      "id": "contact-002",
+      "company_name": "TechStart Inc",
+      "url": "https://www.techstart.io",
+      "goal": "contact",
+      "elements": [
+        {"text": "Platform", "href": "/platform", "inNav": true, "visible": true},
+        {"text": "Solutions", "href": "/solutions", "inNav": true, "visible": true},
+        {"text": "Pricing", "href": "/pricing", "inNav": true, "visible": true},
+        {"text": "Get In Touch", "href": "/contact-us", "inNav": true, "visible": true},
+        {"text": "Resources", "href": "/resources", "inNav": true, "visible": true},
+        {"text": "Login", "href": "/login", "inNav": true, "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Get In Touch",
+      "difficulty": "easy",
+      "notes": "Contact link uses indirect text 'Get In Touch'"
+    },
+    {
+      "id": "contact-003",
+      "company_name": "BuildRight Construction",
+      "url": "https://www.buildright.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Services", "href": "/services", "inNav": true, "visible": true},
+        {"text": "Projects", "href": "/projects", "inNav": true, "visible": true},
+        {"text": "About", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Request a Quote", "href": "/quote", "inNav": true, "visible": true},
+        {"text": "Safety", "href": "/safety", "inNav": true, "visible": true},
+        {"text": "Contact Our Team", "href": "/contact", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 5,
+      "expected_pick_text": "Contact Our Team",
+      "difficulty": "medium",
+      "notes": "Contact in footer; 'Request a Quote' is a distractor"
+    },
+    {
+      "id": "contact-004",
+      "company_name": "DataFlow Analytics",
+      "url": "https://www.dataflow.ai",
+      "goal": "contact",
+      "elements": [
+        {"text": "Product", "href": "/product", "inNav": true, "visible": true},
+        {"text": "Docs", "href": "/docs", "inNav": true, "visible": true},
+        {"text": "Company", "href": "/company", "inNav": true, "visible": true},
+        {"text": "Talk to Sales", "href": "/sales", "visible": true},
+        {"text": "Support", "href": "/support", "visible": true},
+        {"text": "Status", "href": "https://status.dataflow.ai", "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Talk to Sales",
+      "difficulty": "medium",
+      "notes": "'Talk to Sales' is the primary contact path for SaaS companies"
+    },
+    {
+      "id": "contact-005",
+      "company_name": "Mountain View Labs",
+      "url": "https://www.mountainviewlabs.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Research", "href": "/research", "inNav": true, "visible": true},
+        {"text": "Publications", "href": "/publications", "inNav": true, "visible": true},
+        {"text": "Team", "href": "/team", "inNav": true, "visible": true},
+        {"text": "News", "href": "/news", "inNav": true, "visible": true},
+        {"text": "We're Hiring!", "href": "/opportunities", "visible": true},
+        {"text": "Reach Us", "href": "/contact", "aria": "Contact information", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 5,
+      "expected_pick_text": "Reach Us",
+      "difficulty": "medium",
+      "notes": "Informal 'Reach Us' text in footer with clarifying ARIA"
+    },
+    {
+      "id": "contact-006",
+      "company_name": "GlobalShip Logistics",
+      "url": "https://www.globalship.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Track Shipment", "href": "/track", "inNav": true, "visible": true},
+        {"text": "Services", "href": "/services", "inNav": true, "visible": true},
+        {"text": "Locations", "href": "/locations", "inNav": true, "visible": true},
+        {"text": "About Us", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Customer Support", "href": "/support", "inNav": true, "visible": true},
+        {"text": "Employment Opportunities", "href": "/employment", "inFooter": true, "visible": true},
+        {"text": "Contact Us", "href": "/contact", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 6,
+      "expected_pick_text": "Contact Us",
+      "difficulty": "easy",
+      "notes": "Explicit 'Contact Us' in footer; 'Customer Support' is a distractor"
+    },
+    {
+      "id": "contact-007",
+      "company_name": "NovaPharma",
+      "url": "https://www.novapharma.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Pipeline", "href": "/pipeline", "inNav": true, "visible": true},
+        {"text": "Science", "href": "/science", "inNav": true, "visible": true},
+        {"text": "Patients", "href": "/patients", "inNav": true, "visible": true},
+        {"text": "Investors", "href": "/investors", "inNav": true, "visible": true},
+        {"text": "Media", "href": "/media", "inNav": true, "visible": true},
+        {"text": "Medical Information", "href": "/medical-info", "visible": true}
+      ],
+      "expected_pick_idx": null,
+      "expected_pick_text": null,
+      "difficulty": "hard",
+      "notes": "No explicit contact link — correct answer is NONE. Medical Information is a distractor."
+    },
+    {
+      "id": "contact-008",
+      "company_name": "QuietTech Solutions",
+      "url": "https://www.quiettech.io",
+      "goal": "contact",
+      "elements": [
+        {"text": "Home", "href": "/", "inNav": true, "visible": true},
+        {"text": "What We Do", "href": "/services", "inNav": true, "visible": true},
+        {"text": "Our Work", "href": "/portfolio", "inNav": true, "visible": true},
+        {"text": "Get In Touch", "href": "/contact", "inNav": true, "visible": true},
+        {"text": "Privacy", "href": "/privacy", "inFooter": true, "visible": true},
+        {"text": "Terms", "href": "/terms", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Get In Touch",
+      "difficulty": "easy",
+      "notes": "Simple nav with 'Get In Touch' contact link"
+    },
+    {
+      "id": "contact-009",
+      "company_name": "Cipher Security",
+      "url": "https://www.ciphersec.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Products", "href": "/products", "inNav": true, "visible": true},
+        {"text": "Solutions", "href": "/solutions", "inNav": true, "visible": true},
+        {"text": "Partners", "href": "/partners", "inNav": true, "visible": true},
+        {"text": "Company", "href": "/company", "inNav": true, "visible": true},
+        {"text": "Request Demo", "href": "/demo", "visible": true},
+        {"text": "Security Blog", "href": "/blog", "visible": true},
+        {"text": "info@ciphersec.com", "href": "mailto:info@ciphersec.com", "inFooter": true, "visible": true},
+        {"text": "Sales Inquiry", "href": "/contact-sales", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 6,
+      "expected_pick_text": "Sales Inquiry",
+      "difficulty": "medium",
+      "notes": "mailto link gets filtered out by element prep; Sales Inquiry is the navigable contact path"
+    },
+    {
+      "id": "contact-010",
+      "company_name": "Heritage Bank",
+      "url": "https://www.heritagebank.com",
+      "goal": "contact",
+      "elements": [
+        {"text": "Personal Banking", "href": "/personal", "inNav": true, "visible": true},
+        {"text": "Business Banking", "href": "/business", "inNav": true, "visible": true},
+        {"text": "Wealth Management", "href": "/wealth", "inNav": true, "visible": true},
+        {"text": "Locations", "href": "/locations", "inNav": true, "visible": true},
+        {"text": "About Heritage", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Find a Branch", "href": "/branches", "visible": true},
+        {"text": "Customer Service", "href": "/customer-service", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 6,
+      "expected_pick_text": "Customer Service",
+      "difficulty": "medium",
+      "notes": "'Customer Service' in footer is best contact path. 'Locations'/'Find a Branch' are distractors."
+    }
+  ]
+}

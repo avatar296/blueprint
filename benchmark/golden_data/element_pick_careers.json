@@ -1,0 +1,277 @@
+{
+  "version": "1.0",
+  "goal": "careers",
+  "cases": [
+    {
+      "id": "careers-001",
+      "company_name": "Acme Corp",
+      "url": "https://www.acmecorp.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Home", "href": "/", "inNav": true, "visible": true},
+        {"text": "About Us", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Products", "href": "/products", "inNav": true, "visible": true},
+        {"text": "Careers", "href": "/careers", "inNav": true, "visible": true},
+        {"text": "Contact", "href": "/contact", "inNav": true, "visible": true},
+        {"text": "Blog", "href": "/blog", "inNav": true, "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Careers",
+      "difficulty": "easy",
+      "notes": "Standard nav with explicit Careers link"
+    },
+    {
+      "id": "careers-002",
+      "company_name": "TechStart Inc",
+      "url": "https://www.techstart.io",
+      "goal": "careers",
+      "elements": [
+        {"text": "Platform", "href": "/platform", "inNav": true, "visible": true},
+        {"text": "Solutions", "href": "/solutions", "inNav": true, "visible": true},
+        {"text": "Pricing", "href": "/pricing", "inNav": true, "visible": true},
+        {"text": "Join Our Team", "href": "/join-us", "inNav": true, "visible": true},
+        {"text": "Resources", "href": "/resources", "inNav": true, "visible": true},
+        {"text": "Login", "href": "/login", "inNav": true, "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Join Our Team",
+      "difficulty": "easy",
+      "notes": "Careers link uses indirect text 'Join Our Team'"
+    },
+    {
+      "id": "careers-003",
+      "company_name": "BuildRight Construction",
+      "url": "https://www.buildright.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Services", "href": "/services", "inNav": true, "visible": true},
+        {"text": "Projects", "href": "/projects", "inNav": true, "visible": true},
+        {"text": "About", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Work With Us", "href": "https://buildright.greenhouse.io/jobs", "inNav": false, "inFooter": true, "visible": true},
+        {"text": "Safety", "href": "/safety", "inNav": true, "visible": true},
+        {"text": "Investors", "href": "/investors", "inNav": true, "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Work With Us",
+      "difficulty": "medium",
+      "notes": "Careers link in footer pointing to Greenhouse ATS"
+    },
+    {
+      "id": "careers-004",
+      "company_name": "DataFlow Analytics",
+      "url": "https://www.dataflow.ai",
+      "goal": "careers",
+      "elements": [
+        {"text": "Product", "href": "/product", "inNav": true, "visible": true},
+        {"text": "Docs", "href": "/docs", "inNav": true, "visible": true},
+        {"text": "Company", "href": "/company", "inNav": true, "visible": true},
+        {"text": "Open Positions", "href": "https://jobs.lever.co/dataflow", "visible": true},
+        {"text": "Blog", "href": "/blog", "visible": true},
+        {"text": "Status", "href": "https://status.dataflow.ai", "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Open Positions",
+      "difficulty": "medium",
+      "notes": "Lever ATS link with 'Open Positions' text, not in nav"
+    },
+    {
+      "id": "careers-005",
+      "company_name": "Mountain View Labs",
+      "url": "https://www.mountainviewlabs.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Research", "href": "/research", "inNav": true, "visible": true},
+        {"text": "Publications", "href": "/publications", "inNav": true, "visible": true},
+        {"text": "Team", "href": "/team", "inNav": true, "visible": true},
+        {"text": "News", "href": "/news", "inNav": true, "visible": true},
+        {"text": "We're Hiring!", "href": "/opportunities", "aria": "View open positions", "visible": true},
+        {"text": "Partners", "href": "/partners", "visible": true}
+      ],
+      "expected_pick_idx": 4,
+      "expected_pick_text": "We're Hiring!",
+      "difficulty": "medium",
+      "notes": "Informal careers text with ARIA label providing context"
+    },
+    {
+      "id": "careers-006",
+      "company_name": "GlobalShip Logistics",
+      "url": "https://www.globalship.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Track Shipment", "href": "/track", "inNav": true, "visible": true},
+        {"text": "Services", "href": "/services", "inNav": true, "visible": true},
+        {"text": "Locations", "href": "/locations", "inNav": true, "visible": true},
+        {"text": "About Us", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Customer Support", "href": "/support", "inNav": true, "visible": true},
+        {"text": "Employment Opportunities", "href": "/employment", "inFooter": true, "visible": true},
+        {"text": "Privacy Policy", "href": "/privacy", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 5,
+      "expected_pick_text": "Employment Opportunities",
+      "difficulty": "medium",
+      "notes": "Formal 'Employment Opportunities' in footer only"
+    },
+    {
+      "id": "careers-007",
+      "company_name": "NovaPharma",
+      "url": "https://www.novapharma.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Pipeline", "href": "/pipeline", "inNav": true, "visible": true},
+        {"text": "Science", "href": "/science", "inNav": true, "visible": true},
+        {"text": "Patients", "href": "/patients", "inNav": true, "visible": true},
+        {"text": "Investors", "href": "/investors", "inNav": true, "visible": true},
+        {"text": "Media", "href": "/media", "inNav": true, "visible": true},
+        {"text": "Life at NovaPharma", "href": "https://novapharma.wd5.myworkdayjobs.com", "visible": true}
+      ],
+      "expected_pick_idx": 5,
+      "expected_pick_text": "Life at NovaPharma",
+      "difficulty": "hard",
+      "notes": "Workday ATS link with branded 'Life at' text, no explicit careers keyword"
+    },
+    {
+      "id": "careers-008",
+      "company_name": "QuietTech Solutions",
+      "url": "https://www.quiettech.io",
+      "goal": "careers",
+      "elements": [
+        {"text": "Home", "href": "/", "inNav": true, "visible": true},
+        {"text": "What We Do", "href": "/services", "inNav": true, "visible": true},
+        {"text": "Our Work", "href": "/portfolio", "inNav": true, "visible": true},
+        {"text": "Get In Touch", "href": "/contact", "inNav": true, "visible": true},
+        {"text": "Privacy", "href": "/privacy", "inFooter": true, "visible": true},
+        {"text": "Terms", "href": "/terms", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": null,
+      "expected_pick_text": null,
+      "difficulty": "hard",
+      "notes": "No careers link exists — correct answer is NONE"
+    },
+    {
+      "id": "careers-009",
+      "company_name": "FreshFood Markets",
+      "url": "https://www.freshfoodmarkets.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Shop Online", "href": "/shop", "inNav": true, "visible": true},
+        {"text": "Weekly Deals", "href": "/deals", "inNav": true, "visible": true},
+        {"text": "Store Locator", "href": "/stores", "inNav": true, "visible": true},
+        {"text": "Recipes", "href": "/recipes", "inNav": true, "visible": true},
+        {"text": "Apply Now", "href": "https://freshfood.applicantpro.com/jobs", "inFooter": true, "visible": true},
+        {"text": "Gift Cards", "href": "/giftcards", "visible": true}
+      ],
+      "expected_pick_idx": 4,
+      "expected_pick_text": "Apply Now",
+      "difficulty": "medium",
+      "notes": "Retail site with ApplicantPro ATS link in footer"
+    },
+    {
+      "id": "careers-010",
+      "company_name": "SkyBridge Aerospace",
+      "url": "https://www.skybridgeaero.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Defense", "href": "/defense", "inNav": true, "visible": true},
+        {"text": "Commercial", "href": "/commercial", "inNav": true, "visible": true},
+        {"text": "Innovation", "href": "/innovation", "inNav": true, "visible": true},
+        {"text": "Sustainability", "href": "/sustainability", "inNav": true, "visible": true},
+        {"text": "Talent", "href": "/talent", "aria": "Explore career opportunities", "inNav": true, "visible": true},
+        {"text": "Newsroom", "href": "/news", "inNav": true, "visible": true}
+      ],
+      "expected_pick_idx": 4,
+      "expected_pick_text": "Talent",
+      "difficulty": "hard",
+      "notes": "Ambiguous 'Talent' text — ARIA label clarifies as careers"
+    },
+    {
+      "id": "careers-011",
+      "company_name": "Alpine Energy",
+      "url": "https://www.alpineenergy.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Residential", "href": "/residential", "inNav": true, "visible": true},
+        {"text": "Commercial", "href": "/commercial", "inNav": true, "visible": true},
+        {"text": "About", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Join Us", "href": "/careers", "inHeader": true, "visible": true},
+        {"text": "Pay Bill", "href": "/billing", "inNav": true, "visible": true},
+        {"text": "Outages", "href": "/outages", "inNav": true, "visible": true},
+        {"text": "Careers at Alpine", "href": "/careers", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 3,
+      "expected_pick_text": "Join Us",
+      "difficulty": "easy",
+      "notes": "Two careers links — header 'Join Us' and footer 'Careers at Alpine'. Either is acceptable."
+    },
+    {
+      "id": "careers-012",
+      "company_name": "Cipher Security",
+      "url": "https://www.ciphersec.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Products", "href": "/products", "inNav": true, "visible": true},
+        {"text": "Solutions", "href": "/solutions", "inNav": true, "visible": true},
+        {"text": "Partners", "href": "/partners", "inNav": true, "visible": true},
+        {"text": "Company", "href": "/company", "inNav": true, "visible": true},
+        {"text": "View Open Roles", "href": "https://boards.greenhouse.io/ciphersec", "visible": true},
+        {"text": "Request Demo", "href": "/demo", "visible": true},
+        {"text": "Security Blog", "href": "/blog", "visible": true}
+      ],
+      "expected_pick_idx": 4,
+      "expected_pick_text": "View Open Roles",
+      "difficulty": "easy",
+      "notes": "Greenhouse board link with clear 'View Open Roles' text"
+    },
+    {
+      "id": "careers-013",
+      "company_name": "Heritage Bank",
+      "url": "https://www.heritagebank.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Personal Banking", "href": "/personal", "inNav": true, "visible": true},
+        {"text": "Business Banking", "href": "/business", "inNav": true, "visible": true},
+        {"text": "Wealth Management", "href": "/wealth", "inNav": true, "visible": true},
+        {"text": "Locations", "href": "/locations", "inNav": true, "visible": true},
+        {"text": "About Heritage", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Human Resources", "href": "/hr", "inFooter": true, "visible": true},
+        {"text": "FDIC", "href": "https://www.fdic.gov", "inFooter": true, "visible": true},
+        {"text": "Equal Housing Lender", "href": "/equal-housing", "inFooter": true, "visible": true}
+      ],
+      "expected_pick_idx": 5,
+      "expected_pick_text": "Human Resources",
+      "difficulty": "hard",
+      "notes": "Old-school 'Human Resources' text — no modern careers keyword"
+    },
+    {
+      "id": "careers-014",
+      "company_name": "Wanderlust Travel",
+      "url": "https://www.wanderlusttravel.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Destinations", "href": "/destinations", "inNav": true, "visible": true},
+        {"text": "Deals", "href": "/deals", "inNav": true, "visible": true},
+        {"text": "Travel Guides", "href": "/guides", "inNav": true, "visible": true},
+        {"text": "About", "href": "/about", "inNav": true, "visible": true},
+        {"text": "Work at Wanderlust", "href": "/work-here", "visible": true, "inFooter": true},
+        {"text": "Affiliate Program", "href": "/affiliates", "visible": true, "inFooter": true}
+      ],
+      "expected_pick_idx": 4,
+      "expected_pick_text": "Work at Wanderlust",
+      "difficulty": "easy",
+      "notes": "Clear branded careers link in footer"
+    },
+    {
+      "id": "careers-015",
+      "company_name": "Stealth Startup",
+      "url": "https://www.stealthco.com",
+      "goal": "careers",
+      "elements": [
+        {"text": "Coming Soon", "href": "/", "visible": true},
+        {"text": "Sign Up for Updates", "href": "#signup", "visible": true}
+      ],
+      "expected_pick_idx": null,
+      "expected_pick_text": null,
+      "difficulty": "easy",
+      "notes": "Minimal landing page — no careers link. Correct answer is NONE."
+    }
+  ]
+}

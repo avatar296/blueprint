@@ -80,7 +80,26 @@ def _get_ollama_url(config: RunnableConfig) -> str | None:
 
 
 def _get_ollama_model(config: RunnableConfig) -> str:
-    return config["configurable"].get("ollama_model", "llama3")
+    """Resolve model tag from config, applying quant_level and use_lora overrides."""
+    base = config["configurable"].get("ollama_model", "llama3")
+    quant = config["configurable"].get("quant_level", "default")
+    use_lora = config["configurable"].get("use_lora", False)
+
+    if use_lora:
+        # Convention: append -kyb-lora to base name (e.g. llama3 -> llama3-kyb-lora).
+        base_name = base.split(":")[0] if ":" in base else base
+        size_tag = base.split(":")[1] if ":" in base else ""
+        base = f"{base_name}-kyb-lora"
+        if size_tag:
+            base = f"{base}:{size_tag}"
+
+    if quant != "default":
+        if ":" in base:
+            base_name, size = base.rsplit(":", 1)
+            return f"{base_name}:{size}-{quant}"
+        return f"{base}:{quant}"
+
+    return base
 
 
 def _get_vision_model(config: RunnableConfig) -> str | None:

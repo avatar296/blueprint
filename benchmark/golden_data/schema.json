@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GoldenTestSet",
+  "description": "A set of labeled test cases for benchmarking KYB element-picking models",
+  "type": "object",
+  "required": ["version", "goal", "cases"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "goal": { "type": "string", "enum": ["careers", "contact"] },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "company_name", "url", "goal", "elements", "expected_pick_idx"],
+        "properties": {
+          "id": { "type": "string", "description": "Unique case identifier" },
+          "company_name": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "goal": { "type": "string", "enum": ["careers", "contact"] },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": { "type": "string" },
+                "href": { "type": "string" },
+                "aria": { "type": "string", "default": "" },
+                "visible": { "type": "boolean", "default": true },
+                "inNav": { "type": "boolean", "default": false },
+                "inHeader": { "type": "boolean", "default": false },
+                "inFooter": { "type": "boolean", "default": false }
+              }
+            }
+          },
+          "expected_pick_idx": {
+            "type": ["integer", "null"],
+            "description": "Index into the prepared candidates list, or null if NONE is correct"
+          },
+          "expected_pick_text": { "type": ["string", "null"] },
+          "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"], "default": "medium" },
+          "notes": { "type": "string", "default": "" }
+        }
+      }
+    }
+  }
+}

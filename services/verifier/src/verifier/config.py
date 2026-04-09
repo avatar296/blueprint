@@ -22,6 +22,8 @@ class VerifierConfig:
     reverify_days: int = 30
     idle_sleep_seconds: int = 30
     use_langgraph: bool = False
+    quant_level: str = "default"
+    use_lora: bool = False
 
 
 def load_config() -> VerifierConfig:
@@ -54,6 +56,10 @@ def load_config() -> VerifierConfig:
         cfg.idle_sleep_seconds = int(v)
     if os.getenv("VERIFIER_USE_LANGGRAPH", "").lower() in ("1", "true", "yes"):
         cfg.use_langgraph = True
+    if v := os.getenv("VERIFIER_QUANT_LEVEL"):
+        cfg.quant_level = v
+    if os.getenv("VERIFIER_USE_LORA", "").lower() in ("1", "true", "yes"):
+        cfg.use_lora = True
 
     log.info(
         "Config: batch=%d, website_concurrency=%d, ddg_limit=%d, sec_concurrency=%d, discovery_concurrency=%d, ollama=%s, model=%s, vision_model=%s, reverify_days=%d, idle_sleep=%ds",

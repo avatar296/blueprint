@@ -9,6 +9,7 @@ dependencies = [
     "blueprint-evaluator>=0.1.0",
     "blueprint-applier>=0.1.0",
     "blueprint-verifier>=0.1.0",
+    "blueprint-benchmark>=0.1.0",
 ]
 
 [dependency-groups]
@@ -24,6 +25,7 @@ members = [
     "services/evaluator",
     "services/applier",
     "services/verifier",
+    "benchmark",
 ]
 
 [tool.uv.sources]
@@ -32,3 +34,4 @@ blueprint-scout = { workspace = true }
 blueprint-evaluator = { workspace = true }
 blueprint-applier = { workspace = true }
 blueprint-verifier = { workspace = true }
+blueprint-benchmark = { workspace = true }

@@ -1,0 +1,300 @@
+"""Main benchmark orchestrator — runs golden test set through model variants."""
+
+from __future__ import annotations
+
+import json
+import logging
+
+from ..backends.base import ModelBackend
+from ..backends.ollama import OllamaBackend
+from ..config import BenchmarkConfig
+from ..golden.loader import case_to_prompt, load_all_golden_sets, parse_llm_response
+from ..golden.schema import (
+    CaseResult,
+    GoldenTestCase,
+    ParetoPoint,
+    VariantMetrics,
+    VariantScore,
+)
+from ..harness.metrics import (
+    build_variant_metrics,
+    collect_gpu_memory_nvidia_smi,
+    collect_ollama_memory,
+)
+from ..harness.scoring import score_variant
+
+log = logging.getLogger(__name__)
+
+
+class BenchmarkReport:
+    """Aggregated results from a full benchmark run."""
+
+    def __init__(self) -> None:
+        self.scores: list[VariantScore] = []
+        self.metrics: list[VariantMetrics] = []
+        self.pareto: list[ParetoPoint] = []
+        self.raw_results: dict[str, list[CaseResult]] = {}
+        self.raw_latencies: dict[str, list[float]] = {}
+
+    def to_dict(self) -> dict:
+        return {
+            "scores": [s.model_dump() for s in self.scores],
+            "metrics": [m.model_dump() for m in self.metrics],
+            "pareto": [p.model_dump() for p in self.pareto],
+        }
+
+
+async def run_benchmark(
+    config: BenchmarkConfig,
+    models: list[str] | None = None,
+) -> BenchmarkReport:
+    """Run the full benchmark across all configured model variants.
+
+    Args:
+        config: Benchmark configuration.
+        models: Override list of model tags to benchmark. If None, uses
+            config.base_models (and config.lora_models if available).
+    """
+    report = BenchmarkReport()
+
+    # Load golden test sets.
+    golden_sets = load_all_golden_sets(config.golden_data_dir)
+    if not golden_sets:
+        log.error("No golden test sets found in %s", config.golden_data_dir)
+        return report
+
+    all_cases: list[GoldenTestCase] = []
+    for gs in golden_sets:
+        all_cases.extend(gs.cases)
+    log.info("Loaded %d golden test cases across %d sets", len(all_cases), len(golden_sets))
+
+    # Determine which models to benchmark.
+    if models:
+        model_tags = models
+    else:
+        model_tags = list(config.base_models)
+
+    # Check which LoRA models are available and add them.
+    lora_tags: set[str] = set()
+    if not models:
+        for tag in config.lora_models:
+            backend = OllamaBackend(
+                tag, config.ollama_base_url, is_lora=True, timeout=config.ollama_timeout,
+            )
+            if await backend.health_check():
+                model_tags.append(tag)
+                lora_tags.add(tag)
+
+    log.info("Benchmarking %d model variants: %s", len(model_tags), model_tags)
+
+    # Run each variant sequentially to avoid GPU contention.
+    for tag in model_tags:
+        is_lora = tag in lora_tags
+        backend = OllamaBackend(
+            tag, config.ollama_base_url, is_lora=is_lora, timeout=config.ollama_timeout,
+        )
+
+        if not await backend.health_check():
+            log.warning("Skipping %s — not available in Ollama", tag)
+            continue
+
+        log.info("=== Benchmarking: %s (lora=%s) ===", tag, is_lora)
+
+        # Warmup.
+        if all_cases:
+            log.info("Warming up with %d runs...", config.warmup_runs)
+            await _warmup(backend, all_cases[0], config.warmup_runs)
+
+        # Benchmark.
+        results = await _run_variant(backend, all_cases, config.benchmark_runs)
+        report.raw_results[tag] = results
+        report.raw_latencies[tag] = [r.latency_ms for r in results]
+
+        # Collect memory metrics.
+        model_mem = await collect_ollama_memory(config.ollama_base_url, tag)
+        gpu_mem = await collect_gpu_memory_nvidia_smi()
+
+        # Score.
+        score = score_variant(
+            model_id=tag,
+            quant_level=backend.quant_level,
+            is_lora=is_lora,
+            results=results,
+        )
+        report.scores.append(score)
+
+        # Metrics.
+        variant_metrics = build_variant_metrics(
+            model_id=tag,
+            quant_level=backend.quant_level,
+            is_lora=is_lora,
+            results=results,
+            model_memory_mb=model_mem,
+            gpu_memory_mb=gpu_mem,
+            gpu_type=config.default_gpu,
+            custom_rates=config.gpu_cost_rates,
+        )
+        report.metrics.append(variant_metrics)
+
+        log.info(
+            "%s: accuracy=%.2f%% p50=%.1fms p95=%.1fms mem=%.0fMB cost=$%.4f/1k",
+            tag,
+            score.accuracy * 100,
+            variant_metrics.latency_p50_ms,
+            variant_metrics.latency_p95_ms,
+            variant_metrics.model_memory_mb,
+            variant_metrics.estimated_cost_per_1k_queries,
+        )
+
+    # Pareto analysis.
+    from ..report.pareto import find_pareto_optimal
+
+    report.pareto = find_pareto_optimal(report.scores, report.metrics)
+
+    # Log to MLflow.
+    _log_to_mlflow(config, report)
+
+    return report
+
+
+async def _warmup(
+    backend: ModelBackend,
+    case: GoldenTestCase,
+    n: int,
+) -> None:
+    """Run warmup invocations to stabilize latency."""
+    system_prompt, user_prompt, _ = case_to_prompt(case)
+    for _ in range(n):
+        try:
+            await backend.invoke(system_prompt, user_prompt)
+        except Exception:
+            pass
+
+
+async def _run_variant(
+    backend: ModelBackend,
+    cases: list[GoldenTestCase],
+    runs_per_case: int,
+) -> list[CaseResult]:
+    """Run all golden cases through a backend, repeating for statistical power."""
+    results: list[CaseResult] = []
+
+    for case in cases:
+        system_prompt, user_prompt, candidates = case_to_prompt(case)
+
+        for run_idx in range(runs_per_case):
+            try:
+                invoke_result = await backend.invoke(system_prompt, user_prompt)
+                predicted_idx = parse_llm_response(invoke_result.content, candidates)
+
+                correct = predicted_idx == case.expected_pick_idx
+
+                results.append(CaseResult(
+                    case_id=case.id,
+                    model_id=backend.model_id,
+                    quant_level=backend.quant_level,
+                    is_lora=backend.is_lora,
+                    predicted_idx=predicted_idx,
+                    expected_idx=case.expected_pick_idx,
+                    correct=correct,
+                    latency_ms=invoke_result.latency_ms,
+                    prompt_tokens=invoke_result.prompt_tokens,
+                    completion_tokens=invoke_result.completion_tokens,
+                    raw_response=invoke_result.content,
+                ))
+            except Exception:
+                log.warning(
+                    "Run %d/%d failed for case %s on %s",
+                    run_idx + 1, runs_per_case, case.id, backend.model_id,
+                    exc_info=True,
+                )
+                results.append(CaseResult(
+                    case_id=case.id,
+                    model_id=backend.model_id,
+                    quant_level=backend.quant_level,
+                    is_lora=backend.is_lora,
+                    predicted_idx=None,
+                    expected_idx=case.expected_pick_idx,
+                    correct=case.expected_pick_idx is None,
+                    latency_ms=0.0,
+                    raw_response="ERROR",
+                ))
+
+    return results
+
+
+def _log_to_mlflow(config: BenchmarkConfig, report: BenchmarkReport) -> None:
+    """Log all benchmark results to MLflow."""
+    try:
+        import mlflow
+    except ImportError:
+        log.warning("MLflow not installed — skipping tracking")
+        return
+
+    mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+    mlflow.set_experiment(config.mlflow_experiment)
+
+    for score, metrics in zip(report.scores, report.metrics):
+        with mlflow.start_run(run_name=f"{score.model_id}"):
+            # Params.
+            mlflow.log_param("model_id", score.model_id)
+            mlflow.log_param("quant_level", score.quant_level)
+            mlflow.log_param("is_lora", score.is_lora)
+            mlflow.log_param("backend", score.backend)
+            mlflow.log_param("benchmark_runs", config.benchmark_runs)
+            mlflow.log_param("warmup_runs", config.warmup_runs)
+
+            # Metrics.
+            mlflow.log_metric("accuracy", score.accuracy)
+            mlflow.log_metric("none_rate", score.none_rate)
+            mlflow.log_metric("false_none_rate", score.false_none_rate)
+            mlflow.log_metric("total_cases", score.total_cases)
+            mlflow.log_metric("latency_p50_ms", metrics.latency_p50_ms)
+            mlflow.log_metric("latency_p95_ms", metrics.latency_p95_ms)
+            mlflow.log_metric("latency_p99_ms", metrics.latency_p99_ms)
+            mlflow.log_metric("latency_mean_ms", metrics.latency_mean_ms)
+            mlflow.log_metric("tokens_per_second", metrics.tokens_per_second)
+            mlflow.log_metric("model_memory_mb", metrics.model_memory_mb)
+            mlflow.log_metric("cost_per_1k_queries", metrics.estimated_cost_per_1k_queries)
+
+            if metrics.gpu_memory_mb is not None:
+                mlflow.log_metric("gpu_memory_mb", metrics.gpu_memory_mb)
+
+            # Per-goal metrics.
+            for goal, val in score.precision_by_goal.items():
+                mlflow.log_metric(f"precision_{goal}", val)
+            for goal, val in score.recall_by_goal.items():
+                mlflow.log_metric(f"recall_{goal}", val)
+            for goal, val in score.f1_by_goal.items():
+                mlflow.log_metric(f"f1_{goal}", val)
+
+            # Confusion matrix as params.
+            for outcome, count in score.confusion_matrix.items():
+                mlflow.log_metric(f"cm_{outcome}", count)
+
+    # Log artifacts if output dir has results.
+    output_dir = config.output_dir
+    if output_dir.exists():
+        with mlflow.start_run(run_name="benchmark_artifacts"):
+            for f in output_dir.iterdir():
+                if f.is_file() and f.suffix in (".json", ".md", ".png"):
+                    mlflow.log_artifact(str(f))
+
+
+def save_results(config: BenchmarkConfig, report: BenchmarkReport) -> None:
+    """Save benchmark results to output directory."""
+    output_dir = config.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # JSON report.
+    json_path = output_dir / "comparison_report.json"
+    with open(json_path, "w") as f:
+        json.dump(report.to_dict(), f, indent=2)
+    log.info("Saved JSON report to %s", json_path)
+
+    # Raw results per variant.
+    for model_id, results in report.raw_results.items():
+        safe_name = model_id.replace(":", "_").replace("/", "_")
+        path = output_dir / f"raw_{safe_name}.json"
+        with open(path, "w") as f:
+            json.dump([r.model_dump() for r in results], f, indent=2)
