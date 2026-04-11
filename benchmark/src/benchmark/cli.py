@@ -38,6 +38,8 @@ def cli(verbose: bool) -> None:
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("--ollama-url", type=str, default=None, help="Ollama base URL")
 @click.option("--skip-lora", is_flag=True, help="Skip LoRA model variants")
+@click.option("--extra-golden-dir", multiple=True, type=click.Path(exists=True, path_type=Path),
+              help="Additional golden test set directories (e.g. edge cases)")
 def run(
     models: tuple[str, ...],
     runs: int | None,
@@ -46,6 +48,7 @@ def run(
     output_dir: Path | None,
     ollama_url: str | None,
     skip_lora: bool,
+    extra_golden_dir: tuple[Path, ...],
 ) -> None:
     """Run the quantization benchmark against golden test sets."""
     config = load_config()
@@ -72,7 +75,8 @@ def run(
     from .report.markdown import generate_report
     from .report.plots import generate_all_plots
 
-    report = asyncio.run(run_benchmark(config, models=model_list))
+    extra_dirs = list(extra_golden_dir) if extra_golden_dir else None
+    report = asyncio.run(run_benchmark(config, models=model_list, extra_golden_dirs=extra_dirs))
 
     if not report.scores:
         log.error("No benchmark results — check Ollama availability and model tags")

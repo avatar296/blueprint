@@ -14,6 +14,7 @@ members = [
     "blueprint-benchmark",
     "blueprint-common",
     "blueprint-evaluator",
+    "blueprint-lora",
     "blueprint-scout",
     "blueprint-verifier",
 ]
@@ -231,6 +232,7 @@ dependencies = [
     { name = "blueprint-benchmark" },
     { name = "blueprint-common" },
     { name = "blueprint-evaluator" },
+    { name = "blueprint-lora" },
     { name = "blueprint-scout" },
     { name = "blueprint-verifier" },
 ]
@@ -247,6 +249,7 @@ requires-dist = [
     { name = "blueprint-benchmark", editable = "benchmark" },
     { name = "blueprint-common", editable = "services/common" },
     { name = "blueprint-evaluator", editable = "services/evaluator" },
+    { name = "blueprint-lora", editable = "lora" },
     { name = "blueprint-scout", editable = "services/scout" },
     { name = "blueprint-verifier", editable = "services/verifier" },
 ]
@@ -352,6 +355,23 @@ requires-dist = [
     { name = "langchain", specifier = ">=0.3" },
     { name = "langchain-ollama", specifier = ">=0.3" },
     { name = "python-dotenv", specifier = ">=1.0" },
+]
+
+[[package]]
+name = "blueprint-lora"
+version = "0.1.0"
+source = { editable = "lora" }
+dependencies = [
+    { name = "blueprint-benchmark" },
+    { name = "blueprint-verifier" },
+    { name = "click" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blueprint-benchmark", editable = "benchmark" },
+    { name = "blueprint-verifier", editable = "services/verifier" },
+    { name = "click", specifier = ">=8.1" },
 ]
 
 [[package]]

@@ -124,11 +124,16 @@ async def discover_one_langgraph(
     ollama_vision_model: str | None = None,
     ollama_vision_timeout: float = 15.0,
     vectorstore=None,
+    capture_training_signals: bool = False,
 ) -> dict[str, Any]:
     """Run the LangGraph discovery cascade for one company.
 
     Drop-in replacement for discovery.py's _discover_one().
     Returns {"careers": {...}, "contact": {...}} in the same format.
+
+    When *capture_training_signals* is True, includes an additional
+    ``training_signals`` key with cascade metadata for LoRA training
+    data generation (careers_source, picked elements, full element list).
     """
     app = build_discovery_graph()
 
@@ -155,10 +160,22 @@ async def discover_one_langgraph(
 
     result = await app.ainvoke(state, config=config)
 
-    return {
+    out: dict[str, Any] = {
         "careers": result.get("careers", empty_careers()),
         "contact": result.get("contact", empty_contact()),
     }
+
+    if capture_training_signals:
+        out["training_signals"] = {
+            "careers_source": result.get("careers_source", "none"),
+            "best_careers_el": result.get("best_careers_el"),
+            "best_contact_el": result.get("best_contact_el"),
+            "elements": result.get("elements", []),
+            "base_url": result.get("base_url", ""),
+            "nav_failed": result.get("nav_failed", False),
+        }
+
+    return out
 
 
 async def discover_batch_langgraph(

@@ -34,5 +34,14 @@ Thumbs.db
 # Database backups
 backups/
 
+# LoRA training artifacts
+lora/data/
+lora/adapters/
+lora/merged_models/
+lora/results/
+lora/company_list*.json
+benchmark/results/
+benchmark/mlflow_runs/
+
 # uv
 .python-version

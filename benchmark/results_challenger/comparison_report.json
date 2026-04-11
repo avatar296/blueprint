@@ -1,0 +1,363 @@
+{
+  "scores": [
+    {
+      "model_id": "llama3:8b",
+      "quant_level": "q4_0",
+      "is_lora": false,
+      "backend": "ollama",
+      "accuracy": 0.92,
+      "precision_by_goal": {
+        "careers": 0.9286,
+        "contact": 0.9
+      },
+      "recall_by_goal": {
+        "careers": 1.0,
+        "contact": 1.0
+      },
+      "f1_by_goal": {
+        "careers": 0.963,
+        "contact": 0.9474
+      },
+      "confusion_matrix": {
+        "correct_pick": 220,
+        "false_pick": 20,
+        "true_none": 10
+      },
+      "none_rate": 0.04,
+      "false_none_rate": 0.0,
+      "total_cases": 250
+    },
+    {
+      "model_id": "llama3:8b-instruct-q8_0",
+      "quant_level": "q8_0",
+      "is_lora": false,
+      "backend": "ollama",
+      "accuracy": 0.92,
+      "precision_by_goal": {
+        "careers": 0.9286,
+        "contact": 0.9
+      },
+      "recall_by_goal": {
+        "careers": 1.0,
+        "contact": 1.0
+      },
+      "f1_by_goal": {
+        "careers": 0.963,
+        "contact": 0.9474
+      },
+      "confusion_matrix": {
+        "correct_pick": 220,
+        "false_pick": 20,
+        "true_none": 10
+      },
+      "none_rate": 0.04,
+      "false_none_rate": 0.0,
+      "total_cases": 250
+    },
+    {
+      "model_id": "llama3:8b-instruct-fp16",
+      "quant_level": "f16",
+      "is_lora": false,
+      "backend": "ollama",
+      "accuracy": 0.92,
+      "precision_by_goal": {
+        "careers": 0.9286,
+        "contact": 0.9
+      },
+      "recall_by_goal": {
+        "careers": 1.0,
+        "contact": 1.0
+      },
+      "f1_by_goal": {
+        "careers": 0.963,
+        "contact": 0.9474
+      },
+      "confusion_matrix": {
+        "correct_pick": 220,
+        "false_pick": 20,
+        "true_none": 10
+      },
+      "none_rate": 0.04,
+      "false_none_rate": 0.0,
+      "total_cases": 250
+    },
+    {
+      "model_id": "llama3.2:3b",
+      "quant_level": "q4_k_m",
+      "is_lora": false,
+      "backend": "ollama",
+      "accuracy": 0.84,
+      "precision_by_goal": {
+        "careers": 0.8571,
+        "contact": 0.8
+      },
+      "recall_by_goal": {
+        "careers": 1.0,
+        "contact": 1.0
+      },
+      "f1_by_goal": {
+        "careers": 0.9231,
+        "contact": 0.8889
+      },
+      "confusion_matrix": {
+        "correct_pick": 200,
+        "false_pick": 20,
+        "wrong_pick": 20,
+        "true_none": 10
+      },
+      "none_rate": 0.04,
+      "false_none_rate": 0.0,
+      "total_cases": 250
+    },
+    {
+      "model_id": "llama3-kyb-lora:q4",
+      "quant_level": "q4_k_m",
+      "is_lora": true,
+      "backend": "ollama",
+      "accuracy": 0.12,
+      "precision_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "recall_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "f1_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "confusion_matrix": {
+        "false_none": 220,
+        "true_none": 30
+      },
+      "none_rate": 1.0,
+      "false_none_rate": 1.0,
+      "total_cases": 250
+    },
+    {
+      "model_id": "llama3-kyb-lora:q8",
+      "quant_level": "q8_0",
+      "is_lora": true,
+      "backend": "ollama",
+      "accuracy": 0.12,
+      "precision_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "recall_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "f1_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "confusion_matrix": {
+        "false_none": 220,
+        "true_none": 30
+      },
+      "none_rate": 1.0,
+      "false_none_rate": 1.0,
+      "total_cases": 250
+    },
+    {
+      "model_id": "llama3-kyb-lora:fp16",
+      "quant_level": "f16",
+      "is_lora": true,
+      "backend": "ollama",
+      "accuracy": 0.12,
+      "precision_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "recall_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "f1_by_goal": {
+        "careers": 0.0,
+        "contact": 0.0
+      },
+      "confusion_matrix": {
+        "false_none": 220,
+        "true_none": 30
+      },
+      "none_rate": 1.0,
+      "false_none_rate": 1.0,
+      "total_cases": 250
+    }
+  ],
+  "metrics": [
+    {
+      "model_id": "llama3:8b",
+      "quant_level": "q4_0",
+      "is_lora": false,
+      "backend": "ollama",
+      "latency_p50_ms": 218.4591315,
+      "latency_p95_ms": 293.46475465,
+      "latency_p99_ms": 342.88364430999974,
+      "latency_mean_ms": 223.910409964,
+      "tokens_per_second": 8.932143888806047,
+      "model_memory_mb": 4963.994140625,
+      "gpu_memory_mb": 5963.0,
+      "estimated_cost_per_1k_queries": 0.04975786888088889
+    },
+    {
+      "model_id": "llama3:8b-instruct-q8_0",
+      "quant_level": "q8_0",
+      "is_lora": false,
+      "backend": "ollama",
+      "latency_p50_ms": 458.6588405,
+      "latency_p95_ms": 1086.7927682,
+      "latency_p99_ms": 1105.8058998699998,
+      "latency_mean_ms": 516.869526088,
+      "tokens_per_second": 3.8694484759766796,
+      "model_memory_mb": 8794.8046875,
+      "gpu_memory_mb": 7281.0,
+      "estimated_cost_per_1k_queries": 0.11485989468622225
+    },
+    {
+      "model_id": "llama3:8b-instruct-fp16",
+      "quant_level": "f16",
+      "is_lora": false,
+      "backend": "ollama",
+      "latency_p50_ms": 1090.9641929999998,
+      "latency_p95_ms": 3644.57836985,
+      "latency_p99_ms": 3677.78613813,
+      "latency_mean_ms": 1336.451150332,
+      "tokens_per_second": 1.49650063865272,
+      "model_memory_mb": 15504.4921875,
+      "gpu_memory_mb": 7656.0,
+      "estimated_cost_per_1k_queries": 0.2969891445182222
+    },
+    {
+      "model_id": "llama3.2:3b",
+      "quant_level": "q4_k_m",
+      "is_lora": false,
+      "backend": "ollama",
+      "latency_p50_ms": 197.1666345,
+      "latency_p95_ms": 288.70601244999995,
+      "latency_p99_ms": 313.41860576,
+      "latency_mean_ms": 238.957946184,
+      "tokens_per_second": 8.369673542724456,
+      "model_memory_mb": 2622.853515625,
+      "gpu_memory_mb": 3675.0,
+      "estimated_cost_per_1k_queries": 0.05310176581866667
+    },
+    {
+      "model_id": "llama3-kyb-lora:q4",
+      "quant_level": "q4_k_m",
+      "is_lora": true,
+      "backend": "ollama",
+      "latency_p50_ms": 697.4188750000001,
+      "latency_p95_ms": 716.4384311499999,
+      "latency_p99_ms": 738.2832458299998,
+      "latency_mean_ms": 754.910459228,
+      "tokens_per_second": 65.3322515234939,
+      "model_memory_mb": 2622.853515625,
+      "gpu_memory_mb": 6432.0,
+      "estimated_cost_per_1k_queries": 0.16775787982844448
+    },
+    {
+      "model_id": "llama3-kyb-lora:q8",
+      "quant_level": "q8_0",
+      "is_lora": true,
+      "backend": "ollama",
+      "latency_p50_ms": 982.04503,
+      "latency_p95_ms": 1030.63813045,
+      "latency_p99_ms": 1139.8878506799995,
+      "latency_mean_ms": 1006.460151692,
+      "tokens_per_second": 48.133053175089834,
+      "model_memory_mb": 3960.40234375,
+      "gpu_memory_mb": 5031.0,
+      "estimated_cost_per_1k_queries": 0.2236578114871111
+    },
+    {
+      "model_id": "llama3-kyb-lora:fp16",
+      "quant_level": "f16",
+      "is_lora": true,
+      "backend": "ollama",
+      "latency_p50_ms": 3716.579672,
+      "latency_p95_ms": 3968.20368295,
+      "latency_p99_ms": 4282.173514889999,
+      "latency_mean_ms": 3743.392217684,
+      "tokens_per_second": 13.356869142324209,
+      "model_memory_mb": 7146.900390625,
+      "gpu_memory_mb": 7691.0,
+      "estimated_cost_per_1k_queries": 0.8318649372631111
+    }
+  ],
+  "pareto": [
+    {
+      "model_id": "llama3:8b",
+      "quant_level": "q4_0",
+      "is_lora": false,
+      "accuracy": 0.92,
+      "latency_p50_ms": 218.4591315,
+      "memory_mb": 4963.994140625,
+      "cost_per_1k": 0.04975786888088889,
+      "is_pareto_optimal": true
+    },
+    {
+      "model_id": "llama3:8b-instruct-q8_0",
+      "quant_level": "q8_0",
+      "is_lora": false,
+      "accuracy": 0.92,
+      "latency_p50_ms": 458.6588405,
+      "memory_mb": 8794.8046875,
+      "cost_per_1k": 0.11485989468622225,
+      "is_pareto_optimal": false
+    },
+    {
+      "model_id": "llama3:8b-instruct-fp16",
+      "quant_level": "f16",
+      "is_lora": false,
+      "accuracy": 0.92,
+      "latency_p50_ms": 1090.9641929999998,
+      "memory_mb": 15504.4921875,
+      "cost_per_1k": 0.2969891445182222,
+      "is_pareto_optimal": false
+    },
+    {
+      "model_id": "llama3.2:3b",
+      "quant_level": "q4_k_m",
+      "is_lora": false,
+      "accuracy": 0.84,
+      "latency_p50_ms": 197.1666345,
+      "memory_mb": 2622.853515625,
+      "cost_per_1k": 0.05310176581866667,
+      "is_pareto_optimal": true
+    },
+    {
+      "model_id": "llama3-kyb-lora:q4",
+      "quant_level": "q4_k_m",
+      "is_lora": true,
+      "accuracy": 0.12,
+      "latency_p50_ms": 697.4188750000001,
+      "memory_mb": 2622.853515625,
+      "cost_per_1k": 0.16775787982844448,
+      "is_pareto_optimal": false
+    },
+    {
+      "model_id": "llama3-kyb-lora:q8",
+      "quant_level": "q8_0",
+      "is_lora": true,
+      "accuracy": 0.12,
+      "latency_p50_ms": 982.04503,
+      "memory_mb": 3960.40234375,
+      "cost_per_1k": 0.2236578114871111,
+      "is_pareto_optimal": false
+    },
+    {
+      "model_id": "llama3-kyb-lora:fp16",
+      "quant_level": "f16",
+      "is_lora": true,
+      "accuracy": 0.12,
+      "latency_p50_ms": 3716.579672,
+      "memory_mb": 7146.900390625,
+      "cost_per_1k": 0.8318649372631111,
+      "is_pareto_optimal": false
+    }
+  ]
+}

@@ -35,6 +35,7 @@ def merge_and_export_gguf(
     Returns:
         List of Ollama model tags created.
     """
+    import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -45,10 +46,14 @@ def merge_and_export_gguf(
     out.mkdir(parents=True, exist_ok=True)
 
     # 1. Load and merge.
+    # Use float16 + CPU offload to fit on memory-constrained machines.
     log.info("Loading base model: %s", base_model)
     tokenizer = AutoTokenizer.from_pretrained(base_model)
     model = AutoModelForCausalLM.from_pretrained(
-        base_model, device_map="auto", torch_dtype="auto",
+        base_model,
+        device_map="auto",
+        torch_dtype=torch.float16,
+        low_cpu_mem_usage=True,
     )
 
     log.info("Loading adapter: %s", adapter_path)

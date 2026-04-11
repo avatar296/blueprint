@@ -16,14 +16,15 @@ class BenchmarkConfig:
 
     # Model variants to benchmark (Ollama model tags).
     base_models: list[str] = field(default_factory=lambda: [
-        "llama3:8b",
-        "llama3:8b-q8_0",
-        "llama3:8b-q4_0",
+        "llama3:8b",                    # 8B Q4_0 (current production)
+        "llama3:8b-instruct-q8_0",      # 8B Q8
+        "llama3:8b-instruct-fp16",      # 8B FP16
+        "llama3.2:3b",                  # 3B base (no LoRA)
     ])
     lora_models: list[str] = field(default_factory=lambda: [
-        "llama3-kyb-lora:8b",
-        "llama3-kyb-lora:8b-q8_0",
-        "llama3-kyb-lora:8b-q4_0",
+        "llama3-kyb-lora:q4",           # 3B LoRA Q4_K_M
+        "llama3-kyb-lora:q8",           # 3B LoRA Q8_0
+        "llama3-kyb-lora:fp16",         # 3B LoRA FP16
     ])
 
     # Benchmark execution

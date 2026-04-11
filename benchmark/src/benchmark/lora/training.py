@@ -40,26 +40,36 @@ def train_lora(
     train_data: str,
     output_dir: str,
     config=None,
+    *,
+    qlora: bool = False,
+    gradient_accumulation_steps: int = 1,
 ) -> str:
     """Fine-tune a LoRA adapter on KYB element-classification data.
 
     Args:
-        base_model: HuggingFace model ID (e.g. 'meta-llama/Meta-Llama-3-8B').
+        base_model: HuggingFace model ID (e.g. 'meta-llama/Meta-Llama-3-8B-Instruct').
         train_data: Path to JSONL training file.
         output_dir: Directory to save the LoRA adapter.
         config: Optional BenchmarkConfig for hyperparameter overrides.
+        qlora: If True, load base model in 4-bit via BitsAndBytesConfig
+            (QLoRA). Fits Llama 3 8B on consumer GPUs with 8GB VRAM.
+        gradient_accumulation_steps: Accumulate gradients over N steps
+            before updating. Use with batch_size=1 for memory-constrained
+            GPUs (effective batch = batch_size × accumulation).
 
     Returns:
         Path to the saved adapter directory.
     """
+    import torch
     from datasets import load_dataset
-    from peft import get_peft_model
+    from peft import get_peft_model, prepare_model_for_kbit_training
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        TrainingArguments,
-        Trainer,
+        BitsAndBytesConfig,
         DataCollatorForLanguageModeling,
+        Trainer,
+        TrainingArguments,
     )
 
     # Resolve hyperparameters.
@@ -70,16 +80,32 @@ def train_lora(
     batch_size = config.lora_batch_size if config else 4
     lr = config.lora_learning_rate if config else 2e-4
 
-    log.info("Loading base model: %s", base_model)
+    log.info("Loading base model: %s (qlora=%s)", base_model, qlora)
     tokenizer = AutoTokenizer.from_pretrained(base_model)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model,
-        device_map="auto",
-        torch_dtype="auto",
-    )
+    # Model loading: QLoRA (4-bit) or full precision.
+    if qlora:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model,
+            quantization_config=bnb_config,
+            device_map="auto",
+        )
+        model = prepare_model_for_kbit_training(model)
+        log.info("Loaded in 4-bit QLoRA mode (NF4 + double quant)")
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model,
+            device_map="auto",
+            torch_dtype="auto",
+        )
 
     # Apply LoRA.
     lora_config = create_lora_config(rank=rank, alpha=alpha, dropout=dropout)
@@ -100,7 +126,7 @@ def train_lora(
             text_parts.append(f"<|{role}|>\n{content}")
         text_parts.append("<|assistant|>")
         text = "\n".join(text_parts)
-        return tokenizer(text, truncation=True, max_length=2048, padding="max_length")
+        return tokenizer(text, truncation=True, max_length=1280)
 
     tokenized = dataset.map(_tokenize, remove_columns=dataset.column_names)
 
@@ -112,24 +138,32 @@ def train_lora(
         output_dir=str(output_path / "checkpoints"),
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=lr,
         warmup_ratio=0.1,
         weight_decay=0.01,
-        logging_steps=10,
+        logging_steps=1,
+        logging_first_step=True,
         save_strategy="epoch",
         fp16=True,
-        report_to=["mlflow"],
-        run_name="kyb-lora-training",
+        optim="paged_adamw_8bit" if qlora else "adamw_torch",
+        report_to=["none"],
+        disable_tqdm=False,
     )
 
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=tokenized,
-        data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
+        data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8),
     )
 
-    log.info("Starting LoRA training: epochs=%d, batch=%d, lr=%s", epochs, batch_size, lr)
+    eff_batch = batch_size * gradient_accumulation_steps
+    log.info(
+        "Starting %s training: epochs=%d, batch=%d, grad_accum=%d (eff_batch=%d), lr=%s",
+        "QLoRA" if qlora else "LoRA", epochs, batch_size,
+        gradient_accumulation_steps, eff_batch, lr,
+    )
     trainer.train()
 
     # Save adapter (not the full model).
